@@ -1,0 +1,124 @@
+import asyncio
+import csv
+import re
+import tempfile
+from pathlib import Path
+
+from argustrace.core.models import Finding, Status
+
+IMAGE = "sherlock/sherlock@sha256:9d6602b98179fb15ceab88433626fb0ae603ae9880e13cab886970317fe1475f"
+ENTITY_PATTERN = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")
+
+# Small, fast-responding set of well-known sites. Checking all ~400+ sites
+# that Sherlock knows about takes 1-3 minutes; this default trades recall
+# for a sub-10s response time.
+CURATED_SITES = [
+    "GitHub", "Reddit", "Twitter", "Instagram",
+    "YouTube", "GitLab", "Keybase", "Snapchat", "Telegram",
+]
+
+FAST_RUN_TIMEOUT_S = 60
+FULL_RUN_TIMEOUT_S = 240
+SITE_TIMEOUT_S = "15"
+
+# Sherlock's own per-site status, mapped onto our tri-state Status.
+# "Illegal" means the username doesn't match that site's naming rules,
+# i.e. no check was actually attempted, so those rows are dropped entirely.
+SITE_STATUS_MAP = {
+    "Claimed": Status.FOUND,
+    "Available": Status.NOT_FOUND,
+    "Unknown": Status.ERROR,
+    "WAF": Status.ERROR,
+}
+
+
+class SherlockPlugin:
+    name = "sherlock"
+    supported_entities = ["username"]
+
+    def __init__(self, sites: list[str] | None = CURATED_SITES):
+        # sites=None means an unrestricted scan across every site Sherlock knows about.
+        self.sites = sites
+        self.run_timeout_s = FAST_RUN_TIMEOUT_S if sites else FULL_RUN_TIMEOUT_S
+
+    async def run(self, entity: str) -> list[Finding]:
+        if not ENTITY_PATTERN.match(entity):
+            return [self._error(entity, "invalid entity: must match " + ENTITY_PATTERN.pattern)]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cmd = [
+                "docker", "run", "--rm",
+                "--cap-drop=ALL",
+                "--security-opt=no-new-privileges",
+                "--read-only",
+                "--tmpfs", "/tmp",
+                "--memory=512m",
+                "--cpus=1",
+                "--pids-limit=256",
+                "-v", f"{tmpdir}:/output",
+                IMAGE,
+                entity,
+                "--csv",
+                "--folderoutput", "/output",
+                "--no-txt",
+                "--print-all",
+                "--timeout", SITE_TIMEOUT_S,
+            ]
+            for site in self.sites or []:
+                cmd += ["--site", site]
+
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                try:
+                    _, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.run_timeout_s)
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+                    return [self._error(entity, f"docker run timed out after {self.run_timeout_s}s")]
+            except FileNotFoundError:
+                return [self._error(entity, "docker executable not found on host")]
+
+            if proc.returncode != 0:
+                return [self._error(entity, f"docker run failed: {stderr.decode(errors='replace')[:500]}")]
+
+            csv_path = Path(tmpdir) / f"{entity}.csv"
+            if not csv_path.exists():
+                return [self._error(entity, "sherlock produced no CSV output")]
+
+            return self._parse_csv(entity, csv_path)
+
+    def _parse_csv(self, entity: str, csv_path: Path) -> list[Finding]:
+        findings = []
+        with csv_path.open(newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                status = SITE_STATUS_MAP.get(row["exists"])
+                if status is None:
+                    continue
+                findings.append(
+                    Finding(
+                        entity=entity,
+                        entity_type="username",
+                        source=f"sherlock:{row['name']}",
+                        status=status,
+                        url=row["url_user"] or None,
+                        evidence={
+                            "http_status": row["http_status"],
+                            "response_time_s": row["response_time_s"],
+                            "site_status": row["exists"],
+                        },
+                    )
+                )
+        return findings
+
+    def _error(self, entity: str, reason: str) -> Finding:
+        return Finding(
+            entity=entity,
+            entity_type="username",
+            source="sherlock",
+            status=Status.ERROR,
+            evidence={"reason": reason},
+        )

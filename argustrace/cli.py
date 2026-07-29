@@ -4,11 +4,14 @@ import json
 import typer
 
 from argustrace.plugins.mock_plugin import MockPlugin
+from argustrace.plugins.sherlock_plugin import SherlockPlugin
 
 app = typer.Typer()
 
 PLUGINS = {
     "mock": MockPlugin(),
+    "sherlock": SherlockPlugin(),        # fast: curated site list (~10s)
+    "sherlock-full": SherlockPlugin(sites=None),  # slow: full ~400+ site scan
 }
 
 

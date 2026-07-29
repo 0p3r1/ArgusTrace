@@ -2,3 +2,4 @@
 __pycache__/
 .env
 CLAUDE.local.md
+.pytest_cache/

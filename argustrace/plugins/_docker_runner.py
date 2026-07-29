@@ -26,17 +26,14 @@ class DockerRunResult:
 async def run_hardened(
     image: str,
     args: list[str],
-    volume: tuple[str, str],
     timeout_s: int,
+    volume: tuple[str, str] | None = None,
 ) -> DockerRunResult:
-    host_path, container_path = volume
-    cmd = [
-        "docker", "run", "--rm",
-        *HARDENING_FLAGS,
-        "-v", f"{host_path}:{container_path}",
-        image,
-        *args,
-    ]
+    cmd = ["docker", "run", "--rm", *HARDENING_FLAGS]
+    if volume is not None:
+        host_path, container_path = volume
+        cmd += ["-v", f"{host_path}:{container_path}"]
+    cmd += [image, *args]
 
     try:
         proc = await asyncio.create_subprocess_exec(

@@ -15,10 +15,10 @@ scheduler, correlation engine, scoring, graph, or REST API gets built on top.
 ```mermaid
 %%{init: {"flowchart": {"subGraphTitleMargin": {"top": 10, "bottom": 15}}}}%%
 flowchart LR
-    User(["You: \"check this username or email\""])
+    User(["You: \"check this username, email, or phone\""])
     CLI["ArgusTrace CLI"]
     Mock["Mock plugin<br/>(demo, no real check)"]
-    ToolPlugin["Tool plugin<br/>(Sherlock, Holehe, ...)"]
+    ToolPlugin["Tool plugin<br/>(Sherlock, Holehe, Ignorant, ...)"]
     Findings["Findings:<br/>found / not found / error"]
     Output(["JSON result"])
 
@@ -37,8 +37,8 @@ flowchart LR
 ```
 
 Any failure inside the container (timeout, docker missing, bad output) is
-caught by `SherlockPlugin` and turned into a `Finding(status=ERROR)` — it
-never propagates as an exception.
+caught by the plugin and turned into a `Finding(status=ERROR)` — it never
+propagates as an exception.
 
 ## Core design
 
@@ -64,12 +64,16 @@ argustrace/
 │   ├── _docker_runner.py  # shared hardened `docker run` helper
 │   ├── mock_plugin.py   # hardcoded findings, no I/O — proves the pipeline
 │   ├── sherlock_plugin.py  # runs Sherlock in a hardened Docker container
-│   └── holehe_plugin.py    # runs Holehe in a hardened Docker container
+│   ├── holehe_plugin.py    # runs Holehe in a hardened Docker container
+│   └── ignorant_plugin.py  # runs Ignorant in a hardened Docker container
 └── cli.py                # `investigate` command
 
 docker/
-└── holehe/
-    └── Dockerfile        # builds argustrace-holehe (no official image exists)
+├── holehe/
+│   └── Dockerfile        # builds argustrace-holehe (no official image exists)
+└── ignorant/
+    ├── Dockerfile        # builds argustrace-ignorant (no official image exists)
+    └── ignorant_json.py  # thin wrapper: calls ignorant's library directly, prints JSON
 ```
 
 ## Setup
@@ -81,14 +85,15 @@ pins exact versions and hashes for every package.
 uv sync
 ```
 
-Docker Desktop (or another Docker engine) must be running for the `sherlock`,
-`sherlock-full`, and `holehe` plugins.
+Docker Desktop (or another Docker engine) must be running for the
+`sherlock`, `sherlock-full`, `holehe`, and `ignorant` plugins.
 
-Sherlock is pulled straight from a pinned registry image. Holehe has no
-official image, so it must be built locally once:
+Sherlock is pulled straight from a pinned registry image. Holehe and
+Ignorant have no official image, so each must be built locally once:
 
 ```bash
 docker build -t argustrace-holehe:1.61 -f docker/holehe/Dockerfile .
+docker build -t argustrace-ignorant:1.2 -f docker/ignorant/Dockerfile .
 ```
 
 ## Usage
@@ -98,6 +103,7 @@ uv run python -m argustrace.cli <entity> --plugin mock             # no network,
 uv run python -m argustrace.cli <username> --plugin sherlock       # curated ~10-site list, a few seconds
 uv run python -m argustrace.cli <username> --plugin sherlock-full  # full ~400+ site scan, 1-3 minutes
 uv run python -m argustrace.cli <email> --plugin holehe             # ~120 sites, ~10 seconds
+uv run python -m argustrace.cli <phone> --plugin ignorant            # 3 sites, E164 format e.g. +33612345678
 ```
 
 Output is a JSON array of `Finding` objects.
@@ -147,6 +153,34 @@ argparse stores an explicit value as a string instead of an int, which
 makes every single module raise immediately. Omitting the flag keeps the
 (int) default and avoids the bug entirely.
 
+## The Ignorant plugin
+
+[Ignorant](https://github.com/megadose/ignorant) checks whether a phone
+number is registered on Amazon, Instagram, and Snapchat — same author and
+design as Holehe, same isolation model, also built from a local Dockerfile
+(no official image exists).
+
+Ignorant's CLI has no CSV/JSON export, so the image bakes in a small
+wrapper ([`ignorant_json.py`](docker/ignorant/ignorant_json.py)) that
+calls the library's own scan functions directly and prints JSON — more
+reliable than parsing colored terminal output. Same status mapping as
+Holehe: `rateLimit: true` → `ERROR`, `exists: true` → `FOUND`, otherwise
+`NOT_FOUND`.
+
+Entities are parsed with the [`phonenumbers`](https://pypi.org/project/phonenumbers/)
+library (Google's libphonenumber) rather than a hand-rolled regex —
+splitting a raw number like `+33612345678` into country code (`33`) and
+national number (`612345678`) isn't reliably doable with pattern matching,
+since country codes vary from 1 to 3 digits with no delimiter in the string.
+
+**Why not PhoneInfoga?** It was the first candidate, but its free (no
+API key) scanners don't actually check anything — the "OSINT" scanner
+just generates Google search URLs (e.g. `site:instagram.com intext:"+1..."`)
+for a human to open and read themselves, and the "local" scanner only
+validates formatting/carrier, with no found/not-found signal at all.
+Forcing that into `FOUND`/`NOT_FOUND` would misrepresent what was actually
+verified, which is exactly what the tri-state `Status` exists to prevent.
+
 ## Testing
 
 ```bash
@@ -154,7 +188,7 @@ uv run pytest -v
 ```
 
 Tests lock the `Status`/`Finding`/`Plugin` contracts using `MockPlugin`, plus
-the entity validation and CSV-to-`Status` mapping logic of the Sherlock and
-Holehe plugins against fixture data — none of it needs Docker or network
-access. Actually running Sherlock/Holehe against real targets is exercised
-manually, not in the automated suite.
+the entity validation and result-to-`Status` mapping logic of the Sherlock,
+Holehe, and Ignorant plugins against fixture data — none of it needs Docker
+or network access. Actually running these tools against real targets is
+exercised manually, not in the automated suite.

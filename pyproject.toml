@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Framework OSINT modulaire"
 requires-python = ">=3.11"
 dependencies = [
+    "phonenumbers>=9.0.35",
     "pydantic>=2",
     "typer",
 ]

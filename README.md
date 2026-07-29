@@ -13,29 +13,27 @@ scheduler, correlation engine, scoring, graph, or REST API gets built on top.
 ## Architecture
 
 ```mermaid
+%%{init: {"flowchart": {"subGraphTitleMargin": {"top": 10, "bottom": 15}}}}%%
 flowchart LR
-    User(["uv run cli.py investigate ENTITY --plugin X"])
+    User(["You: \"check this username\""])
+    CLI["ArgusTrace CLI"]
+    Mock["Mock plugin<br/>(demo, no real check)"]
+    SherlockPlugin["Sherlock plugin"]
+    Findings["Findings:<br/>found / not found / error"]
+    Output(["JSON result"])
 
-    subgraph Host["Host process"]
-        CLI["cli.py"]
-        Registry["PLUGINS registry"]
-        Mock["MockPlugin\n(no I/O)"]
-        SherlockPy["SherlockPlugin\n(subprocess: docker run)"]
-        Models["Finding / Status\n(pydantic)"]
+    subgraph Container["Sandboxed Docker container<br/>(spun up, used once, destroyed)"]
+        Sherlock["Sherlock<br/>(the actual OSINT tool)"]
     end
 
-    subgraph Container["Ephemeral Docker container\ncap-drop=ALL · read-only · no-new-privileges\nmem/cpu/pids limits"]
-        Sherlock["sherlock/sherlock\n(pinned by sha256 digest)"]
-    end
-
-    User --> CLI --> Registry
-    Registry --> Mock
-    Registry --> SherlockPy
-    SherlockPy -- "docker run + volume mount" --> Sherlock
-    Sherlock -- "CSV in tmp volume" --> SherlockPy
-    Mock --> Models
-    SherlockPy --> Models
-    Models --> Output(["JSON stdout"])
+    User --> CLI
+    CLI --> Mock
+    CLI --> SherlockPlugin
+    SherlockPlugin -- "runs it in isolation,<br/>never touches your machine" --> Sherlock
+    Sherlock -- "results come back" --> SherlockPlugin
+    Mock --> Findings
+    SherlockPlugin --> Findings
+    Findings --> Output
 ```
 
 Any failure inside the container (timeout, docker missing, bad output) is
@@ -102,12 +100,12 @@ digest, with:
 
 Sherlock's own per-site result is mapped onto our `Status`:
 
-| Sherlock status | `Status`   |
-| ---------------- | ---------- |
-| `Claimed`         | `FOUND`     |
-| `Available`       | `NOT_FOUND` |
-| `Unknown`, `WAF`  | `ERROR`     |
-| `Illegal`         | dropped (username invalid for that site — no check happened) |
+| Sherlock status  | `Status`                                                     |
+| ---------------- | ------------------------------------------------------------ |
+| `Claimed`        | `FOUND`                                                      |
+| `Available`      | `NOT_FOUND`                                                  |
+| `Unknown`, `WAF` | `ERROR`                                                      |
+| `Illegal`        | dropped (username invalid for that site — no check happened) |
 
 ## Testing
 

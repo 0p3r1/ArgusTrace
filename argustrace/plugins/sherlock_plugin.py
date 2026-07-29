@@ -1,10 +1,10 @@
-import asyncio
 import csv
 import re
 import tempfile
 from pathlib import Path
 
 from argustrace.core.models import Finding, Status
+from argustrace.plugins._docker_runner import run_hardened
 
 IMAGE = "sherlock/sherlock@sha256:9d6602b98179fb15ceab88433626fb0ae603ae9880e13cab886970317fe1475f"
 ENTITY_PATTERN = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")
@@ -46,17 +46,7 @@ class SherlockPlugin:
             return [self._error(entity, "invalid entity: must match " + ENTITY_PATTERN.pattern)]
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            cmd = [
-                "docker", "run", "--rm",
-                "--cap-drop=ALL",
-                "--security-opt=no-new-privileges",
-                "--read-only",
-                "--tmpfs", "/tmp",
-                "--memory=512m",
-                "--cpus=1",
-                "--pids-limit=256",
-                "-v", f"{tmpdir}:/output",
-                IMAGE,
+            args = [
                 entity,
                 "--csv",
                 "--folderoutput", "/output",
@@ -65,25 +55,15 @@ class SherlockPlugin:
                 "--timeout", SITE_TIMEOUT_S,
             ]
             for site in self.sites or []:
-                cmd += ["--site", site]
+                args += ["--site", site]
 
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                try:
-                    _, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.run_timeout_s)
-                except asyncio.TimeoutError:
-                    proc.kill()
-                    await proc.wait()
-                    return [self._error(entity, f"docker run timed out after {self.run_timeout_s}s")]
-            except FileNotFoundError:
-                return [self._error(entity, "docker executable not found on host")]
-
-            if proc.returncode != 0:
-                return [self._error(entity, f"docker run failed: {stderr.decode(errors='replace')[:500]}")]
+            result = await run_hardened(
+                IMAGE, args, volume=(tmpdir, "/output"), timeout_s=self.run_timeout_s,
+            )
+            if not result.ok:
+                return [self._error(entity, result.error)]
+            if result.returncode != 0:
+                return [self._error(entity, f"docker run failed: {result.stderr.decode(errors='replace')[:500]}")]
 
             csv_path = Path(tmpdir) / f"{entity}.csv"
             if not csv_path.exists():

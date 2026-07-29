@@ -15,24 +15,24 @@ scheduler, correlation engine, scoring, graph, or REST API gets built on top.
 ```mermaid
 %%{init: {"flowchart": {"subGraphTitleMargin": {"top": 10, "bottom": 15}}}}%%
 flowchart LR
-    User(["You: \"check this username\""])
+    User(["You: \"check this username or email\""])
     CLI["ArgusTrace CLI"]
     Mock["Mock plugin<br/>(demo, no real check)"]
-    SherlockPlugin["Sherlock plugin"]
+    ToolPlugin["Tool plugin<br/>(Sherlock, Holehe, ...)"]
     Findings["Findings:<br/>found / not found / error"]
     Output(["JSON result"])
 
     subgraph Container["Sandboxed Docker container<br/>(spun up, used once, destroyed)"]
-        Sherlock["Sherlock<br/>(the actual OSINT tool)"]
+        Tool["The actual OSINT tool"]
     end
 
     User --> CLI
     CLI --> Mock
-    CLI --> SherlockPlugin
-    SherlockPlugin -- "runs it in isolation,<br/>never touches your machine" --> Sherlock
-    Sherlock -- "results come back" --> SherlockPlugin
+    CLI --> ToolPlugin
+    ToolPlugin -- "runs it in isolation,<br/>never touches your machine" --> Tool
+    Tool -- "results come back" --> ToolPlugin
     Mock --> Findings
-    SherlockPlugin --> Findings
+    ToolPlugin --> Findings
     Findings --> Output
 ```
 
@@ -61,9 +61,15 @@ argustrace/
 │   └── models.py       # Status, Finding
 ├── plugins/
 │   ├── base.py          # Plugin protocol
+│   ├── _docker_runner.py  # shared hardened `docker run` helper
 │   ├── mock_plugin.py   # hardcoded findings, no I/O — proves the pipeline
-│   └── sherlock_plugin.py  # runs Sherlock in a hardened Docker container
+│   ├── sherlock_plugin.py  # runs Sherlock in a hardened Docker container
+│   └── holehe_plugin.py    # runs Holehe in a hardened Docker container
 └── cli.py                # `investigate` command
+
+docker/
+└── holehe/
+    └── Dockerfile        # builds argustrace-holehe (no official image exists)
 ```
 
 ## Setup
@@ -75,15 +81,23 @@ pins exact versions and hashes for every package.
 uv sync
 ```
 
-Docker Desktop (or another Docker engine) must be running for the `sherlock`
-and `sherlock-full` plugins.
+Docker Desktop (or another Docker engine) must be running for the `sherlock`,
+`sherlock-full`, and `holehe` plugins.
+
+Sherlock is pulled straight from a pinned registry image. Holehe has no
+official image, so it must be built locally once:
+
+```bash
+docker build -t argustrace-holehe:1.61 -f docker/holehe/Dockerfile .
+```
 
 ## Usage
 
 ```bash
-uv run python -m argustrace.cli <entity> --plugin mock           # no network, proves the pipeline
+uv run python -m argustrace.cli <entity> --plugin mock             # no network, proves the pipeline
 uv run python -m argustrace.cli <username> --plugin sherlock       # curated ~10-site list, a few seconds
 uv run python -m argustrace.cli <username> --plugin sherlock-full  # full ~400+ site scan, 1-3 minutes
+uv run python -m argustrace.cli <email> --plugin holehe             # ~120 sites, ~10 seconds
 ```
 
 Output is a JSON array of `Finding` objects.
@@ -107,6 +121,32 @@ Sherlock's own per-site result is mapped onto our `Status`:
 | `Unknown`, `WAF` | `ERROR`                                                      |
 | `Illegal`        | dropped (username invalid for that site — no check happened) |
 
+## The Holehe plugin
+
+[Holehe](https://github.com/megadose/holehe) checks whether an email is
+registered on ~120 sites via their "forgot password" flow. Same isolation
+as Sherlock (`--cap-drop=ALL`, `--read-only`, `--security-opt=no-new-privileges`,
+resource limits), but built from a local Dockerfile pinned to a specific
+`pip` version and base image digest, since no official image exists.
+
+Holehe's own per-site result is mapped onto our `Status`:
+
+| Holehe result                | `Status`    |
+| ----------------------------- | ----------- |
+| `rateLimit: True`             | `ERROR`     |
+| `exists: True`                | `FOUND`     |
+| `exists: False`, no rate limit | `NOT_FOUND` |
+
+Note: Holehe's own code treats *any* exception raised while checking a site
+(network error, parsing failure, actual rate limiting, ...) as `rateLimit:
+True` — it's a catch-all, not a precise signal, which is exactly why our
+`ERROR` status exists as a separate bucket from `NOT_FOUND`.
+
+The plugin deliberately never passes `--timeout` to Holehe: in v1.61,
+argparse stores an explicit value as a string instead of an int, which
+makes every single module raise immediately. Omitting the flag keeps the
+(int) default and avoids the bug entirely.
+
 ## Testing
 
 ```bash
@@ -114,5 +154,5 @@ uv run pytest -v
 ```
 
 Tests lock the `Status`/`Finding`/`Plugin` contracts using `MockPlugin` —
-no Docker or network access required. The Sherlock plugin is exercised
-manually against real targets, not in the automated suite.
+no Docker or network access required. The Sherlock and Holehe plugins are
+exercised manually against real targets, not in the automated suite.

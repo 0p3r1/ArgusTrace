@@ -153,6 +153,8 @@ makes every single module raise immediately. Omitting the flag keeps the
 uv run pytest -v
 ```
 
-Tests lock the `Status`/`Finding`/`Plugin` contracts using `MockPlugin` —
-no Docker or network access required. The Sherlock and Holehe plugins are
-exercised manually against real targets, not in the automated suite.
+Tests lock the `Status`/`Finding`/`Plugin` contracts using `MockPlugin`, plus
+the entity validation and CSV-to-`Status` mapping logic of the Sherlock and
+Holehe plugins against fixture data — none of it needs Docker or network
+access. Actually running Sherlock/Holehe against real targets is exercised
+manually, not in the automated suite.

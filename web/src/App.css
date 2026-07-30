@@ -64,6 +64,36 @@
   outline-offset: 1px;
 }
 
+.entity-filter {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.filter-chip {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: capitalize;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.filter-chip:hover {
+  background: var(--surface-hover);
+}
+
+.filter-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
 .tool-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -85,6 +115,11 @@
 
 .tool-card:hover {
   background: var(--surface-hover);
+}
+
+.tool-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .tool-card.selected {
@@ -129,6 +164,24 @@
   background: var(--accent-bg);
   border-radius: 6px;
   padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.variant-select {
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.variant-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .submit-button {

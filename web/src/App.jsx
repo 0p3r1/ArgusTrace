@@ -5,20 +5,43 @@ import StatusBadge from './StatusBadge.jsx'
 
 const API_BASE = 'http://127.0.0.1:8000'
 
-function ToolCard({ tool, selected, onSelect }) {
+function ToolCard({ family, selected, activeVariantKey, onSelectFamily, onSelectVariant }) {
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       className={`tool-card${selected ? ' selected' : ''}`}
-      onClick={() => onSelect(tool.key)}
+      onClick={() => onSelectFamily(family.family)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelectFamily(family.family)
+        }
+      }}
     >
       <div className="tool-card-head">
-        <span className="tool-label">{tool.label}</span>
-        <span className="tool-speed">{tool.speed}</span>
+        <span className="tool-label">{family.label}</span>
+        <span className="tool-entity">{family.entity_type}</span>
       </div>
-      <p className="tool-description">{tool.description}</p>
-      <span className="tool-entity">{tool.entity_type}</span>
-    </button>
+      <p className="tool-description">{family.description}</p>
+
+      {family.variants.length > 1 ? (
+        <select
+          className="variant-select"
+          value={activeVariantKey}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => onSelectVariant(family.family, e.target.value)}
+        >
+          {family.variants.map((v) => (
+            <option key={v.key} value={v.key}>
+              {v.variant_label} — {v.speed}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span className="tool-speed">{family.variants[0].speed}</span>
+      )}
+    </div>
   )
 }
 
@@ -57,8 +80,10 @@ function ResultsSummary({ findings, activeFilter, onToggleFilter }) {
 }
 
 function App() {
-  const [tools, setTools] = useState([])
-  const [plugin, setPlugin] = useState('mock')
+  const [families, setFamilies] = useState([])
+  const [entityFilter, setEntityFilter] = useState(null)
+  const [selectedFamily, setSelectedFamily] = useState(null)
+  const [variantByFamily, setVariantByFamily] = useState({})
   const [entity, setEntity] = useState('')
   const [findings, setFindings] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -69,11 +94,43 @@ function App() {
     fetch(`${API_BASE}/api/plugins`)
       .then((res) => res.json())
       .then((data) => {
-        setTools(data)
-        if (data.length > 0) setPlugin(data[0].key)
+        setFamilies(data)
+        if (data.length > 0) {
+          setSelectedFamily(data[0].family)
+          setVariantByFamily(Object.fromEntries(data.map((f) => [f.family, f.variants[0].key])))
+        }
       })
       .catch(() => setError('Could not reach the ArgusTrace API. Is it running?'))
   }, [])
+
+  const entityTypes = useMemo(() => {
+    const seen = []
+    for (const f of families) {
+      if (f.entity_type !== 'any' && !seen.includes(f.entity_type)) seen.push(f.entity_type)
+    }
+    return seen
+  }, [families])
+
+  const visibleFamilies = useMemo(
+    () => families.filter((f) => !entityFilter || f.entity_type === 'any' || f.entity_type === entityFilter),
+    [families, entityFilter],
+  )
+
+  function handleEntityFilterChange(type) {
+    setEntityFilter(type)
+    const stillVisible = families.some(
+      (f) => f.family === selectedFamily && (!type || f.entity_type === 'any' || f.entity_type === type),
+    )
+    if (!stillVisible) {
+      const nextVisible = families.filter((f) => !type || f.entity_type === 'any' || f.entity_type === type)
+      if (nextVisible.length > 0) setSelectedFamily(nextVisible[0].family)
+    }
+  }
+
+  function handleSelectVariant(family, variantKey) {
+    setSelectedFamily(family)
+    setVariantByFamily((prev) => ({ ...prev, [family]: variantKey }))
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -81,6 +138,7 @@ function App() {
     setError(null)
     setFindings(null)
     setStatusFilter(null)
+    const plugin = variantByFamily[selectedFamily]
     try {
       const res = await fetch(`${API_BASE}/api/investigate`, {
         method: 'POST',
@@ -118,13 +176,35 @@ function App() {
             required
           />
 
+          <div className="entity-filter">
+            <button
+              type="button"
+              className={`filter-chip${!entityFilter ? ' active' : ''}`}
+              onClick={() => handleEntityFilterChange(null)}
+            >
+              All
+            </button>
+            {entityTypes.map((type) => (
+              <button
+                key={type}
+                type="button"
+                className={`filter-chip${entityFilter === type ? ' active' : ''}`}
+                onClick={() => handleEntityFilterChange(type)}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+
           <div className="tool-grid">
-            {tools.map((tool) => (
+            {visibleFamilies.map((family) => (
               <ToolCard
-                key={tool.key}
-                tool={tool}
-                selected={plugin === tool.key}
-                onSelect={setPlugin}
+                key={family.family}
+                family={family}
+                selected={selectedFamily === family.family}
+                activeVariantKey={variantByFamily[family.family]}
+                onSelectFamily={setSelectedFamily}
+                onSelectVariant={handleSelectVariant}
               />
             ))}
           </div>

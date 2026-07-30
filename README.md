@@ -61,12 +61,14 @@ argustrace/
 │   └── models.py       # Status, Finding
 ├── plugins/
 │   ├── base.py          # Plugin protocol
+│   ├── registry.py      # PLUGINS dict, shared by the CLI and the API
 │   ├── _docker_runner.py  # shared hardened `docker run` helper
 │   ├── mock_plugin.py   # hardcoded findings, no I/O — proves the pipeline
 │   ├── sherlock_plugin.py  # runs Sherlock in a hardened Docker container
 │   ├── holehe_plugin.py    # runs Holehe in a hardened Docker container
 │   └── ignorant_plugin.py  # runs Ignorant in a hardened Docker container
-└── cli.py                # `investigate` command
+├── cli.py                # `investigate` command
+└── api.py                # FastAPI app: GET /api/plugins, POST /api/investigate
 
 docker/
 ├── holehe/
@@ -74,6 +76,8 @@ docker/
 └── ignorant/
     ├── Dockerfile        # builds argustrace-ignorant (no official image exists)
     └── ignorant_json.py  # thin wrapper: calls ignorant's library directly, prints JSON
+
+web/                      # React + Vite frontend, calls the FastAPI backend
 ```
 
 ## Setup
@@ -96,6 +100,12 @@ docker build -t argustrace-holehe:1.61 -f docker/holehe/Dockerfile .
 docker build -t argustrace-ignorant:1.2 -f docker/ignorant/Dockerfile .
 ```
 
+The web frontend needs Node.js/npm; install its dependencies once:
+
+```bash
+cd web && npm install
+```
+
 ## Usage
 
 ```bash
@@ -107,6 +117,23 @@ uv run python -m argustrace.cli <phone> --plugin ignorant            # 3 sites, 
 ```
 
 Output is a JSON array of `Finding` objects.
+
+## Web app
+
+A minimal FastAPI backend + React/Vite frontend expose the same
+`PLUGINS` registry as the CLI, so there's exactly one place a plugin is
+registered. Run both in separate terminals:
+
+```bash
+uv run uvicorn argustrace.api:app --port 8000    # backend: http://127.0.0.1:8000
+cd web && npm run dev                             # frontend: http://localhost:5173
+```
+
+Open `http://localhost:5173`, pick a plugin, enter an entity, and submit —
+the request blocks until the plugin finishes (same as the CLI; no
+background job queue yet, so `sherlock-full` will hold the request open
+for 1-3 minutes). FastAPI's interactive docs are at
+`http://127.0.0.1:8000/docs`.
 
 ## The Sherlock plugin
 

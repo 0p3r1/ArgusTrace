@@ -1,0 +1,50 @@
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 20px;
+  font-family: system-ui, sans-serif;
+}
+
+.investigate-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.investigate-form input {
+  flex: 1;
+  padding: 8px 12px;
+}
+
+.investigate-form select,
+.investigate-form button {
+  padding: 8px 12px;
+}
+
+.error {
+  color: #c0392b;
+}
+
+.findings {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.findings th,
+.findings td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+.findings tr.status-found {
+  background: #eafaf1;
+}
+
+.findings tr.status-not_found {
+  background: transparent;
+}
+
+.findings tr.status-error {
+  background: #fdecea;
+}

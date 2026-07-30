@@ -28,11 +28,14 @@ async def run_hardened(
     args: list[str],
     timeout_s: int,
     volume: tuple[str, str] | None = None,
+    env: dict[str, str] | None = None,
 ) -> DockerRunResult:
     cmd = ["docker", "run", "--rm", *HARDENING_FLAGS]
     if volume is not None:
         host_path, container_path = volume
         cmd += ["-v", f"{host_path}:{container_path}"]
+    for key, value in (env or {}).items():
+        cmd += ["-e", f"{key}={value}"]
     cmd += [image, *args]
 
     try:

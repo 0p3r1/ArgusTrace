@@ -239,9 +239,13 @@ function App() {
                     <td>{f.source}</td>
                     <td><StatusBadge status={f.status} /></td>
                     <td>
-                      {f.url
-                        ? <a href={f.url} target="_blank" rel="noreferrer">{f.url}</a>
-                        : <span className="muted">—</span>}
+                      {f.url ? (
+                        <a href={f.url} target="_blank" rel="noreferrer">{f.url}</a>
+                      ) : f.evidence?.reason ? (
+                        <span className="muted">{f.evidence.reason}</span>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}

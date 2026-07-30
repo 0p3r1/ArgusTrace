@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from argustrace.core.models import Finding
-from argustrace.plugins.registry import PLUGINS
+from argustrace.plugins.registry import PLUGIN_INFO, PLUGINS
 
 app = FastAPI(title="ArgusTrace")
 
@@ -21,9 +21,17 @@ class InvestigateRequest(BaseModel):
     plugin: str = "mock"
 
 
+class PluginInfo(BaseModel):
+    key: str
+    label: str
+    entity_type: str
+    description: str
+    speed: str
+
+
 @app.get("/api/plugins")
-def list_plugins() -> list[str]:
-    return list(PLUGINS.keys())
+def list_plugins() -> list[PluginInfo]:
+    return [PluginInfo(key=key, **PLUGIN_INFO[key]) for key in PLUGINS]
 
 
 @app.post("/api/investigate")

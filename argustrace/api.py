@@ -69,6 +69,7 @@ class ToolFamily(BaseModel):
     repo_url: str | None = None
     docs_url: str | None = None
     examples: list[ToolExample] = []
+    hidden: bool = False
 
 
 def _version_info(family: str, version_check: dict) -> VersionInfo:
@@ -103,6 +104,7 @@ def list_plugins() -> list[ToolFamily]:
             repo_url=info["repo_url"],
             docs_url=info["docs_url"],
             examples=[ToolExample(**ex) for ex in info["examples"]],
+            hidden=info.get("hidden", False),
         )
         for family, info in TOOL_FAMILIES.items()
     ]

@@ -1,4 +1,5 @@
 import csv
+import json
 import re
 import tempfile
 from pathlib import Path
@@ -60,7 +61,10 @@ class MaigretPlugin:
             if not csv_path.exists():
                 return [self._error(entity, "maigret produced no CSV output")]
 
-            return self._parse_csv(entity, csv_path)
+            json_path = Path(tmpdir) / f"report_{entity}_ndjson.json"
+            profiles = self._parse_profiles(json_path) if json_path.exists() else {}
+
+            return self._parse_csv(entity, csv_path, profiles)
 
     def _build_args(self, entity: str, options: dict | None) -> list[str]:
         options = options or {}
@@ -83,6 +87,12 @@ class MaigretPlugin:
         args = [
             entity,
             "--csv",
+            # Maigret only exposes extracted profile fields (photo, full name,
+            # location, follower counts, ...) via its JSON report, never CSV
+            # (see report.py: generate_csv_report has no ids_data column).
+            # Requesting both keeps CSV as the source of truth for the
+            # tri-state status while ndjson enriches the FOUND rows.
+            "--json", "ndjson",
             "--folderoutput", "/output",
             "--no-progressbar",
             "--timeout", str(timeout),
@@ -93,13 +103,36 @@ class MaigretPlugin:
         args += ["-a"] if self.top_sites is None else ["--top-sites", str(self.top_sites)]
         return args
 
-    def _parse_csv(self, entity: str, csv_path: Path) -> list[Finding]:
+    def _parse_profiles(self, json_path: Path) -> dict[str, dict]:
+        profiles = {}
+        with json_path.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                ids = entry.get("status", {}).get("ids")
+                if ids:
+                    profiles[entry.get("sitename")] = ids
+        return profiles
+
+    def _parse_csv(self, entity: str, csv_path: Path, profiles: dict[str, dict]) -> list[Finding]:
         findings = []
         with csv_path.open(newline="", encoding="utf-8") as f:
             for row in csv.DictReader(f):
                 status = SITE_STATUS_MAP.get(row["exists"])
                 if status is None:
                     continue
+                evidence = {
+                    "http_status": row["http_status"],
+                    "error_reason": row["error_reason"],
+                }
+                profile = profiles.get(row["name"])
+                if profile:
+                    evidence["profile"] = profile
                 findings.append(
                     Finding(
                         entity=entity,
@@ -107,10 +140,7 @@ class MaigretPlugin:
                         source=f"maigret:{row['name']}",
                         status=status,
                         url=row["url_user"] or None,
-                        evidence={
-                            "http_status": row["http_status"],
-                            "error_reason": row["error_reason"],
-                        },
+                        evidence=evidence,
                     )
                 )
         return findings

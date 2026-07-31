@@ -24,7 +24,7 @@ def test_parse_csv_maps_every_maigret_status(tmp_path: Path):
         writer.writerow(["alice", "Reddit", "https://www.reddit.com/", "https://www.reddit.com/user/alice", "Unknown", "403", "Access denied"])
 
     plugin = MaigretPlugin()
-    findings = plugin._parse_csv("alice", csv_path)
+    findings = plugin._parse_csv("alice", csv_path, {})
 
     by_source = {f.source: f for f in findings}
     assert len(findings) == 3
@@ -32,6 +32,37 @@ def test_parse_csv_maps_every_maigret_status(tmp_path: Path):
     assert by_source["maigret:Spotify"].status == Status.NOT_FOUND
     assert by_source["maigret:Reddit"].status == Status.ERROR
     assert by_source["maigret:Reddit"].evidence["error_reason"] == "Access denied"
+    assert "profile" not in by_source["maigret:GitHub"].evidence
+
+
+def test_parse_csv_merges_extracted_profile_for_matching_site(tmp_path: Path):
+    csv_path = tmp_path / "report_alice.csv"
+    with csv_path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["username", "name", "url_main", "url_user", "exists", "http_status", "error_reason"])
+        writer.writerow(["alice", "GitHub", "https://github.com/", "https://github.com/alice", "Claimed", "200", ""])
+        writer.writerow(["alice", "Spotify", "https://open.spotify.com/", "https://open.spotify.com/user/alice", "Available", "404", ""])
+
+    plugin = MaigretPlugin()
+    profiles = {"GitHub": {"fullname": "Alice", "image": "https://example.com/a.jpg"}}
+    findings = plugin._parse_csv("alice", csv_path, profiles)
+
+    by_source = {f.source: f for f in findings}
+    assert by_source["maigret:GitHub"].evidence["profile"] == profiles["GitHub"]
+    assert "profile" not in by_source["maigret:Spotify"].evidence
+
+
+def test_parse_profiles_reads_ndjson_and_keeps_only_nonempty_ids(tmp_path: Path):
+    json_path = tmp_path / "report_alice_ndjson.json"
+    json_path.write_text(
+        '{"sitename": "GitHub", "status": {"ids": {"fullname": "Alice"}}}\n'
+        '{"sitename": "GitHubGist", "status": {"ids": {}}}\n'
+    )
+
+    plugin = MaigretPlugin()
+    profiles = plugin._parse_profiles(json_path)
+
+    assert profiles == {"GitHub": {"fullname": "Alice"}}
 
 
 def test_build_args_defaults():
@@ -39,6 +70,7 @@ def test_build_args_defaults():
     args = plugin._build_args("alice", None)
     assert args[args.index("--timeout") + 1] == "30"
     assert args[args.index("--retries") + 1] == "0"
+    assert args[args.index("--json") + 1] == "ndjson"
     assert "--tags" not in args
 
 

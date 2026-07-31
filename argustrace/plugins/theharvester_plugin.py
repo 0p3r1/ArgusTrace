@@ -35,8 +35,11 @@ class TheHarvesterPlugin:
         if not ENTITY_PATTERN.match(entity):
             return [self._error(entity, "invalid entity: does not look like a domain name")]
 
+        options = options or {}
+        sources = self._resolve_sources(options)
+
         with tempfile.TemporaryDirectory() as tmpdir:
-            args = self._build_args(entity, options)
+            args = self._build_args(entity, options, sources)
 
             result = await run_hardened(
                 IMAGE, args,
@@ -60,27 +63,26 @@ class TheHarvesterPlugin:
             except json.JSONDecodeError:
                 return [self._error(entity, "theHarvester produced unparseable JSON")]
 
-            return self._parse_report(entity, data)
+            return self._parse_report(entity, data, sources)
 
-    def _build_args(self, entity: str, options: dict | None) -> list[str]:
-        options = options or {}
+    def _resolve_sources(self, options: dict) -> str:
+        sources_override = options.get("sources")
+        if isinstance(sources_override, list):
+            valid = [s for s in sources_override if s in ALLOWED_SOURCES]
+            if valid:
+                return ",".join(valid)
+        return self.sources
 
+    def _build_args(self, entity: str, options: dict, sources: str) -> list[str]:
         try:
             limit = int(options.get("limit", DEFAULT_LIMIT))
         except (TypeError, ValueError):
             limit = DEFAULT_LIMIT
         limit = max(LIMIT_MIN, min(LIMIT_MAX, limit))
 
-        sources_override = options.get("sources")
-        if isinstance(sources_override, list):
-            valid = [s for s in sources_override if s in ALLOWED_SOURCES]
-            sources = ",".join(valid) if valid else self.sources
-        else:
-            sources = self.sources
-
         return ["-d", entity, "-b", sources, "-l", str(limit), "-f", "/output/report"]
 
-    def _parse_report(self, entity: str, data: dict) -> list[Finding]:
+    def _parse_report(self, entity: str, data: dict, sources: str) -> list[Finding]:
         # A single host can have multiple DNS records (A + AAAA, dual-stack);
         # theHarvester lists each "name:resolved_target" pair separately, so
         # group by (category, name) and collect every resolved target instead
@@ -113,7 +115,7 @@ class TheHarvesterPlugin:
                     entity_type="domain",
                     source="theharvester",
                     status=Status.NOT_FOUND,
-                    evidence={"reason": f"no results from source(s): {self.sources}"},
+                    evidence={"reason": f"no results from source(s): {sources}"},
                 )
             ]
         return findings

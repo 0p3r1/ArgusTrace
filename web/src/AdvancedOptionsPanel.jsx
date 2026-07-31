@@ -78,12 +78,12 @@ function OptionField({ option, value, onChange }) {
   )
 }
 
-export default function AdvancedOptionsPanel({ family, values, onChange }) {
+export default function AdvancedOptionsPanel({ family, values, onChange, defaultOpen = false }) {
   if (!family || !family.options || family.options.length === 0) return null
 
   return (
-    <details className="advanced-options">
-      <summary>Advanced options ({family.options.length})</summary>
+    <details className="advanced-options" open={defaultOpen || undefined}>
+      <summary>Options ({family.options.length})</summary>
       <div className="advanced-options-body">
         {family.options.map((opt) => (
           <OptionField

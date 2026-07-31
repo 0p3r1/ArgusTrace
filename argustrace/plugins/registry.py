@@ -39,6 +39,7 @@ TOOL_FAMILIES = {
     "mock": {
         "label": "Demo",
         "entity_type": "any",
+        "hidden": True,  # dev/testing tool, never shown in the web catalog
         "description": "Hardcoded sample results. No network access — proves the pipeline works.",
         "repo_url": None,
         "docs_url": None,

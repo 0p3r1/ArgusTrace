@@ -1,6 +1,6 @@
-import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import './App.css'
+import { GitHubIcon } from './icons.jsx'
 import { useToolFamilies } from './useToolFamilies.js'
 import { useVersionCheck } from './useVersionCheck.js'
 import VersionBadge from './VersionBadge.jsx'
@@ -10,10 +10,8 @@ export default function ToolInfoPage() {
   const navigate = useNavigate()
   const { families, loading, setFamilies } = useToolFamilies()
   const { checkVersion, checkingFamily } = useVersionCheck(setFamilies)
-  const [variantKey, setVariantKey] = useState(null)
 
   const family = families.find((f) => f.family === familyKey)
-  const variant = family?.variants.find((v) => v.key === variantKey) ?? family?.variants[0]
 
   if (loading) return <main><p className="muted">Loading…</p></main>
 
@@ -21,42 +19,52 @@ export default function ToolInfoPage() {
     return (
       <main>
         <p className="error-message">Unknown tool: {familyKey}</p>
-        <Link to="/">← Back to investigate</Link>
+        <Link to="/" className="back-link">← Back</Link>
       </main>
     )
   }
 
+  const similarTools = families.filter((f) => !f.hidden && f.family !== family.family && f.entity_type === family.entity_type)
+  const isGitHub = family.repo_url?.includes('github.com')
+
   function handleUseThisTool() {
-    navigate(`/?family=${family.family}&variant=${variant.key}`)
+    navigate(`/?family=${family.family}`)
   }
 
   return (
-    <main className="tool-info-page">
-      <Link to="/" className="back-link">← Back to investigate</Link>
+    <main className={`tool-info-page type-${family.entity_type}`}>
+      <Link to="/" className="back-link">← Back</Link>
+      <p className="breadcrumbs"><span>{family.entity_type}</span><span className="breadcrumb-sep">/</span><span>{family.label}</span></p>
 
       <div className="tool-info-head">
         <h2>{family.label}</h2>
-        <span className="tool-entity">{family.entity_type}</span>
+        <p className="tool-info-description">{family.description}</p>
+      </div>
+
+      <div className="tool-info-badges">
         <VersionBadge
           version={family.version}
           onCheck={family.version.status !== 'not_applicable' ? () => checkVersion(family.family) : undefined}
           checking={checkingFamily === family.family}
         />
+        {family.variants.length > 1 && <span className="fast-badge">⚡ fast mode</span>}
       </div>
 
-      <p className="tool-info-description">{family.description}</p>
-
-      {family.repo_url && (
-        <p>
-          <a href={family.repo_url} target="_blank" rel="noreferrer">View on GitHub ↗</a>
-          {family.docs_url && family.docs_url !== family.repo_url && (
-            <>
-              {' · '}
-              <a href={family.docs_url} target="_blank" rel="noreferrer">Documentation ↗</a>
-            </>
-          )}
-        </p>
-      )}
+      <div className="tool-info-actions">
+        {family.repo_url && (
+          <a className="action-button" href={family.repo_url} target="_blank" rel="noreferrer">
+            {isGitHub && <GitHubIcon />} Visit source ↗
+          </a>
+        )}
+        {isGitHub && (
+          <a className="action-button" href={`${family.repo_url}/issues`} target="_blank" rel="noreferrer">
+            <GitHubIcon /> Report an issue ↗
+          </a>
+        )}
+        <button type="button" className="action-button primary" onClick={handleUseThisTool}>
+          Use this tool
+        </button>
+      </div>
 
       <section className="tool-info-section">
         <h3>Variants</h3>
@@ -64,7 +72,6 @@ export default function ToolInfoPage() {
           {family.variants.map((v) => (
             <li key={v.key}>
               <strong>{v.variant_label}</strong> — {v.speed}
-              {v.fast && <span className="fast-badge">⚡ fast</span>}
             </li>
           ))}
         </ul>
@@ -100,25 +107,18 @@ export default function ToolInfoPage() {
         </section>
       )}
 
-      {family.variants.length > 1 && (
-        <label className="field-label" htmlFor="info-variant-select">
-          Variant to use
-          <select
-            id="info-variant-select"
-            className="variant-select"
-            value={variant.key}
-            onChange={(e) => setVariantKey(e.target.value)}
-          >
-            {family.variants.map((v) => (
-              <option key={v.key} value={v.key}>{v.variant_label}</option>
+      {similarTools.length > 0 && (
+        <section className="tool-info-section">
+          <h3>Similar tools</h3>
+          <div className="similar-tools">
+            {similarTools.map((f) => (
+              <Link key={f.family} to={`/tools/${f.family}`} className="similar-tool-card">
+                {f.label}
+              </Link>
             ))}
-          </select>
-        </label>
+          </div>
+        </section>
       )}
-
-      <button type="button" className="submit-button" onClick={handleUseThisTool}>
-        Use this tool
-      </button>
     </main>
   )
 }

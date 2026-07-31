@@ -1,48 +1,57 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { SearchIcon } from './icons.jsx'
 import VersionBadge from './VersionBadge.jsx'
 
-function ToolRow({ family, selected, onSelect }) {
-  const isFast = family.variants.some((v) => v.fast)
+function ToolCard({ family, onOpen }) {
+  const hasFastVariant = family.variants.length > 1
 
   return (
     <div
       role="button"
       tabIndex={0}
-      className={`tool-row${selected ? ' selected' : ''}`}
-      onClick={() => onSelect(family.family)}
+      className={`tool-card type-${family.entity_type}`}
+      onClick={() => onOpen(family.family)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          onSelect(family.family)
+          onOpen(family.family)
         }
       }}
     >
-      <VersionBadge version={family.version} compact />
-      <span className="tool-row-label">{family.label}</span>
-      <span className="tool-entity">{family.entity_type}</span>
-      {isFast && <span className="fast-badge" title="Has a fast variant">⚡ fast</span>}
-      <span className="tool-row-description">{family.description}</span>
+      <div className="tool-card-head">
+        <span className="tool-card-name">{family.label}</span>
+        <VersionBadge version={family.version} compact />
+      </div>
+
+      <p className="tool-card-desc">{family.description}</p>
+
+      <div className="tool-card-foot">
+        <span className="tool-card-category">{family.entity_type}</span>
+        {hasFastVariant && <span className="fast-badge">⚡ fast mode</span>}
+      </div>
+
       <Link
         to={`/tools/${family.family}`}
-        className="tool-row-details"
+        className="tool-card-details"
         onClick={(e) => e.stopPropagation()}
       >
-        Details
+        View details →
       </Link>
     </div>
   )
 }
 
-export default function ToolBrowser({ families, selectedFamily, onSelectFamily, entityFilter, onEntityFilterChange, entityTypes }) {
+export default function ToolBrowser({ families, onOpenTool, entityFilter, onEntityFilterChange, entityTypes }) {
   const [search, setSearch] = useState('')
   const [fastOnly, setFastOnly] = useState(false)
 
   const visibleFamilies = useMemo(() => {
     const query = search.trim().toLowerCase()
     return families.filter((f) => {
+      if (f.hidden) return false
       if (entityFilter && f.entity_type !== 'any' && f.entity_type !== entityFilter) return false
-      if (fastOnly && !f.variants.some((v) => v.fast)) return false
+      if (fastOnly && f.variants.length <= 1) return false
       if (query && !f.label.toLowerCase().includes(query) && !f.description.toLowerCase().includes(query)) return false
       return true
     })
@@ -50,18 +59,21 @@ export default function ToolBrowser({ families, selectedFamily, onSelectFamily, 
 
   return (
     <div className="tool-browser">
-      <input
-        type="search"
-        className="tool-search"
-        placeholder="Search tools by name or description…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
+      <div className="tool-search-wrap">
+        <span className="tool-search-icon"><SearchIcon /></span>
+        <input
+          type="search"
+          className="tool-search"
+          placeholder="Search all tools…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
 
-      <div className="entity-filter">
+      <div className="tag-filters">
         <button
           type="button"
-          className={`filter-chip${!entityFilter ? ' active' : ''}`}
+          className={`tag-filter${!entityFilter ? ' active' : ''}`}
           onClick={() => onEntityFilterChange(null)}
         >
           All
@@ -70,7 +82,7 @@ export default function ToolBrowser({ families, selectedFamily, onSelectFamily, 
           <button
             key={type}
             type="button"
-            className={`filter-chip${entityFilter === type ? ' active' : ''}`}
+            className={`tag-filter type-${type}${entityFilter === type ? ' active' : ''}`}
             onClick={() => onEntityFilterChange(type)}
           >
             {type}
@@ -78,18 +90,13 @@ export default function ToolBrowser({ families, selectedFamily, onSelectFamily, 
         ))}
         <label className="fast-toggle">
           <input type="checkbox" checked={fastOnly} onChange={(e) => setFastOnly(e.target.checked)} />
-          Fast only
+          Has fast mode
         </label>
       </div>
 
-      <div className="tool-list">
+      <div className="tool-grid">
         {visibleFamilies.map((family) => (
-          <ToolRow
-            key={family.family}
-            family={family}
-            selected={selectedFamily === family.family}
-            onSelect={onSelectFamily}
-          />
+          <ToolCard key={family.family} family={family} onOpen={onOpenTool} />
         ))}
         {visibleFamilies.length === 0 && <p className="muted no-results">No tools match your search/filters.</p>}
       </div>

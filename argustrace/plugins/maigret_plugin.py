@@ -84,6 +84,9 @@ class MaigretPlugin:
         tags = options.get("tags")
         tags = tags.strip() if isinstance(tags, str) and tags.strip() else None
 
+        exclude_tags = options.get("exclude_tags")
+        exclude_tags = exclude_tags.strip() if isinstance(exclude_tags, str) and exclude_tags.strip() else None
+
         args = [
             entity,
             "--csv",
@@ -100,6 +103,10 @@ class MaigretPlugin:
         ]
         if tags:
             args += ["--tags", tags]
+        if exclude_tags:
+            args += ["--exclude-tags", exclude_tags]
+        if options.get("enrich"):
+            args.append("--enrich")
         args += ["-a"] if self.top_sites is None else ["--top-sites", str(self.top_sites)]
         return args
 

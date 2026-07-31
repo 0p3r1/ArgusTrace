@@ -97,3 +97,15 @@ def test_resolve_sources_falls_back_to_preset_when_all_invalid():
 def test_resolve_sources_defaults_to_preset_when_absent():
     plugin = TheHarvesterPlugin(sources="rapiddns,otx,hackertarget,crtsh")
     assert plugin._resolve_sources({}) == "rapiddns,otx,hackertarget,crtsh"
+
+
+def test_build_args_dns_lookup_off_by_default():
+    plugin = TheHarvesterPlugin()
+    args = plugin._build_args("example.com", {}, "rapiddns")
+    assert "-n" not in args
+
+
+def test_build_args_dns_lookup_flag():
+    plugin = TheHarvesterPlugin()
+    args = plugin._build_args("example.com", {"dns_lookup": True}, "rapiddns")
+    assert "-n" in args

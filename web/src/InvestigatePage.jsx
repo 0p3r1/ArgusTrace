@@ -3,11 +3,14 @@ import { useSearchParams } from 'react-router-dom'
 import './App.css'
 import { API_BASE } from './api.js'
 import ResultsPanel from './ResultsPanel.jsx'
+import ResultsTray from './ResultsTray.jsx'
 import RunDrawer from './RunDrawer.jsx'
 import ToolBrowser from './ToolBrowser.jsx'
 import { useToolFamilies } from './useToolFamilies.js'
 import { useVersionCheck } from './useVersionCheck.js'
 import { fastVariant, slowVariant } from './variants.js'
+
+let nextResultId = 1
 
 function InvestigatePage() {
   const { families, error: familiesError, setFamilies } = useToolFamilies()
@@ -18,8 +21,8 @@ function InvestigatePage() {
   const [optionsByFamily, setOptionsByFamily] = useState({})
   const [entity, setEntity] = useState('')
   const [loading, setLoading] = useState(false)
-  const [runResult, setRunResult] = useState(null)
-  const [statusFilter, setStatusFilter] = useState(null)
+  const [runResults, setRunResults] = useState([])
+  const [activeResultId, setActiveResultId] = useState(null)
   const [searchParams, setSearchParams] = useSearchParams()
 
   const entityTypes = useMemo(() => {
@@ -32,6 +35,8 @@ function InvestigatePage() {
   }, [families])
 
   const openFamilyData = families.find((f) => f.family === openFamily) ?? null
+  const activeResult = runResults.find((r) => r.id === activeResultId) ?? null
+  const trayResults = runResults.filter((r) => r.id !== activeResultId)
 
   function openTool(familyKey, opts = {}) {
     const family = families.find((f) => f.family === familyKey)
@@ -65,10 +70,13 @@ function InvestigatePage() {
     }))
   }
 
+  function updateActiveResult(patch) {
+    setRunResults((prev) => prev.map((r) => (r.id === activeResultId ? { ...r, ...patch } : r)))
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setLoading(true)
-    setStatusFilter(null)
 
     const family = openFamilyData
     const investigatedEntity = entity
@@ -79,6 +87,8 @@ function InvestigatePage() {
       : family.variants[0].key
     const rawOptions = fastMode ? {} : optionsByFamily[openFamily] || {}
     const options = Object.fromEntries(Object.entries(rawOptions).filter(([, v]) => v !== undefined))
+
+    const id = nextResultId++
 
     try {
       const res = await fetch(`${API_BASE}/api/investigate`, {
@@ -92,11 +102,12 @@ function InvestigatePage() {
       })
       if (!res.ok) throw new Error(`API returned ${res.status}`)
       const findings = await res.json()
-      setRunResult({ family, entity: investigatedEntity, findings, error: null })
+      setRunResults((prev) => [...prev, { id, family, entity: investigatedEntity, findings, error: null, statusFilter: null }])
     } catch (err) {
-      setRunResult({ family, entity: investigatedEntity, findings: null, error: err.message })
+      setRunResults((prev) => [...prev, { id, family, entity: investigatedEntity, findings: null, error: err.message, statusFilter: null }])
     } finally {
       setLoading(false)
+      setActiveResultId(id)
       closeDrawer()
     }
   }
@@ -104,18 +115,6 @@ function InvestigatePage() {
   return (
     <main>
       <div className="catalog-content">
-        {runResult && (
-          <ResultsPanel
-            family={runResult.family}
-            entity={runResult.entity}
-            findings={runResult.findings}
-            error={runResult.error}
-            statusFilter={statusFilter}
-            onToggleStatusFilter={(s) => setStatusFilter((prev) => (prev === s ? null : s))}
-            onDismiss={() => setRunResult(null)}
-          />
-        )}
-
         <ToolBrowser
           families={families}
           onOpenTool={openTool}
@@ -126,6 +125,28 @@ function InvestigatePage() {
 
         {familiesError && <p className="error-message">{familiesError}</p>}
       </div>
+
+      {activeResult && (
+        <ResultsPanel
+          family={activeResult.family}
+          entity={activeResult.entity}
+          findings={activeResult.findings}
+          error={activeResult.error}
+          statusFilter={activeResult.statusFilter}
+          onToggleStatusFilter={(s) => updateActiveResult({ statusFilter: activeResult.statusFilter === s ? null : s })}
+          onMinimize={() => setActiveResultId(null)}
+          onClose={() => {
+            setRunResults((prev) => prev.filter((r) => r.id !== activeResultId))
+            setActiveResultId(null)
+          }}
+        />
+      )}
+
+      <ResultsTray
+        results={trayResults}
+        onOpen={setActiveResultId}
+        onClose={(id) => setRunResults((prev) => prev.filter((r) => r.id !== id))}
+      />
 
       <RunDrawer
         family={openFamilyData}

@@ -60,3 +60,15 @@ def test_build_args_ignores_invalid_timeout_type():
     plugin = SherlockPlugin(sites=["GitHub"])
     args = plugin._build_args("alice", {"timeout": "not-a-number"})
     assert args[args.index("--timeout") + 1] == "15"
+
+
+def test_build_args_nsfw_off_by_default():
+    plugin = SherlockPlugin(sites=["GitHub"])
+    args = plugin._build_args("alice", None)
+    assert "--nsfw" not in args
+
+
+def test_build_args_nsfw_flag():
+    plugin = SherlockPlugin(sites=["GitHub"])
+    args = plugin._build_args("alice", {"nsfw": True})
+    assert "--nsfw" in args

@@ -80,7 +80,10 @@ class TheHarvesterPlugin:
             limit = DEFAULT_LIMIT
         limit = max(LIMIT_MIN, min(LIMIT_MAX, limit))
 
-        return ["-d", entity, "-b", sources, "-l", str(limit), "-f", "/output/report"]
+        args = ["-d", entity, "-b", sources, "-l", str(limit), "-f", "/output/report"]
+        if options.get("dns_lookup"):
+            args.append("-n")
+        return args
 
     def _parse_report(self, entity: str, data: dict, sources: str) -> list[Finding]:
         # A single host can have multiple DNS records (A + AAAA, dual-stack);

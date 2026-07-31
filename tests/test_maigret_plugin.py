@@ -93,3 +93,27 @@ def test_build_args_ignores_blank_tags():
     plugin = MaigretPlugin()
     args = plugin._build_args("alice", {"tags": "   "})
     assert "--tags" not in args
+
+
+def test_build_args_exclude_tags():
+    plugin = MaigretPlugin()
+    args = plugin._build_args("alice", {"exclude_tags": "adult,dating"})
+    assert args[args.index("--exclude-tags") + 1] == "adult,dating"
+
+
+def test_build_args_ignores_blank_exclude_tags():
+    plugin = MaigretPlugin()
+    args = plugin._build_args("alice", {"exclude_tags": "   "})
+    assert "--exclude-tags" not in args
+
+
+def test_build_args_enrich_off_by_default():
+    plugin = MaigretPlugin()
+    args = plugin._build_args("alice", None)
+    assert "--enrich" not in args
+
+
+def test_build_args_enrich_flag():
+    plugin = MaigretPlugin()
+    args = plugin._build_args("alice", {"enrich": True})
+    assert "--enrich" in args

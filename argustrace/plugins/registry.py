@@ -67,6 +67,11 @@ TOOL_FAMILIES = {
                 "default": 15, "min": 5, "max": 30,
                 "description": "Per-site HTTP timeout in seconds before a site is marked Unknown (ERROR).",
             },
+            {
+                "name": "nsfw", "flag": "--nsfw", "type": "bool", "required": False,
+                "default": False,
+                "description": "Also check NSFW sites, excluded from the default site list.",
+            },
         ],
         # Pinned by image digest (see sherlock_plugin.IMAGE) at Sherlock v0.16.0.
         # Bumping the digest must also bump this constant.
@@ -99,8 +104,24 @@ TOOL_FAMILIES = {
                 "default": None,
                 "description": (
                     "Comma-separated site tags to limit the scan to (e.g. \"photo,gaming\"). "
-                    "Maigret's tag vocabulary is dynamic — see --stats for the current list — "
-                    "so this is free text, not a fixed choice."
+                    "Free text, not a fixed choice — Maigret's site database also grows over "
+                    "time. Most common (from `--stats` on the pinned 0.6.3 database): forum, "
+                    "social, gaming, tech, discussion, education, business, coding, hobby, "
+                    "apps, music, blog, news, art, sharing, auto, shopping, photo, design, "
+                    "crypto. Two-letter country codes (e.g. \"us\", \"fr\") work too."
+                ),
+            },
+            {
+                "name": "exclude_tags", "flag": "--exclude-tags", "type": "str", "required": False,
+                "default": None,
+                "description": "Comma-separated site tags to exclude (blacklist) — same vocabulary as tags.",
+            },
+            {
+                "name": "enrich", "flag": "--enrich", "type": "bool", "required": False,
+                "default": False,
+                "description": (
+                    "Fetch secondary API endpoints derived from claimed profile URLs for "
+                    "extra extracted fields. More requests per found site, so noticeably slower."
                 ),
             },
         ],
@@ -122,7 +143,17 @@ TOOL_FAMILIES = {
         "variants": {
             "holehe": {"variant_label": "Default", "speed": "~10s", "fast": True},
         },
-        "options": [],
+        "options": [
+            {
+                "name": "no_password_recovery", "flag": "-NP", "type": "bool", "required": False,
+                "default": False,
+                "description": (
+                    "Skip the 4 modules (Adobe, Mail.ru, Odnoklassniki, Samsung) that trigger "
+                    "a real password-reset email/notification on the target account. Slightly "
+                    "less coverage in exchange for a quieter, less detectable check."
+                ),
+            },
+        ],
         "version_check": {"method": "pypi", "package": "holehe", "pinned_version": "1.61"},
     },
     "ignorant": {
@@ -135,7 +166,13 @@ TOOL_FAMILIES = {
         "variants": {
             "ignorant": {"variant_label": "Default", "speed": "~5s", "fast": True},
         },
-        "options": [],
+        "options": [
+            {
+                "name": "timeout", "flag": "--timeout", "type": "int", "required": False,
+                "default": 10, "min": 5, "max": 30,
+                "description": "Per-site HTTP timeout in seconds.",
+            },
+        ],
         "version_check": {"method": "pypi", "package": "ignorant", "pinned_version": "1.2"},
     },
     "crtsh": {
@@ -175,6 +212,14 @@ TOOL_FAMILIES = {
                 "description": (
                     "Which free, no-API-key sources to query, overriding the "
                     "single-source/broad presets."
+                ),
+            },
+            {
+                "name": "dns_lookup", "flag": "-n", "type": "bool", "required": False,
+                "default": False,
+                "description": (
+                    "Actively resolve hosts found by the passive sources above that don't "
+                    "already come with a resolved address."
                 ),
             },
         ],

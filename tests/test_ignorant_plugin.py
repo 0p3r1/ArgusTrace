@@ -27,3 +27,24 @@ def test_parse_rows_maps_ratelimit_and_exists_onto_status():
     assert by_source["ignorant:instagram"].status == Status.FOUND
     # rateLimit=True takes priority over exists, regardless of its value.
     assert by_source["ignorant:snapchat"].status == Status.ERROR
+
+
+def test_resolve_timeout_uses_default_when_absent():
+    plugin = IgnorantPlugin()
+    assert plugin._resolve_timeout({}) == 10
+
+
+def test_resolve_timeout_uses_custom_value():
+    plugin = IgnorantPlugin()
+    assert plugin._resolve_timeout({"timeout": 20}) == 20
+
+
+def test_resolve_timeout_clamps_out_of_range_value():
+    plugin = IgnorantPlugin()
+    assert plugin._resolve_timeout({"timeout": 999}) == 30
+    assert plugin._resolve_timeout({"timeout": 1}) == 5
+
+
+def test_resolve_timeout_ignores_invalid_type():
+    plugin = IgnorantPlugin()
+    assert plugin._resolve_timeout({"timeout": "not-a-number"}) == 10

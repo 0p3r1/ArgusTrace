@@ -8,6 +8,10 @@ from argustrace.plugins._docker_runner import run_hardened
 IMAGE = "argustrace-ignorant:1.2"
 RUN_TIMEOUT_S = 60
 
+DEFAULT_TIMEOUT_S = 10
+TIMEOUT_MIN_S = 5
+TIMEOUT_MAX_S = 30
+
 
 class IgnorantPlugin:
     name = "ignorant"
@@ -23,9 +27,10 @@ class IgnorantPlugin:
 
         country_code = str(parsed.country_code)
         national_number = str(parsed.national_number)
+        timeout = self._resolve_timeout(options or {})
 
         result = await run_hardened(
-            IMAGE, [country_code, national_number], timeout_s=RUN_TIMEOUT_S,
+            IMAGE, [country_code, national_number, str(timeout)], timeout_s=RUN_TIMEOUT_S,
         )
         if not result.ok:
             return [self._error(entity, result.error)]
@@ -38,6 +43,13 @@ class IgnorantPlugin:
             return [self._error(entity, "ignorant produced no parseable JSON output")]
 
         return self._parse_rows(entity, rows)
+
+    def _resolve_timeout(self, options: dict) -> int:
+        try:
+            timeout = int(options.get("timeout", DEFAULT_TIMEOUT_S))
+        except (TypeError, ValueError):
+            timeout = DEFAULT_TIMEOUT_S
+        return max(TIMEOUT_MIN_S, min(TIMEOUT_MAX_S, timeout))
 
     def _parse_rows(self, entity: str, rows: list[dict]) -> list[Finding]:
         findings = []

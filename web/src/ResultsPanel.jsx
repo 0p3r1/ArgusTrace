@@ -1,4 +1,5 @@
-import { CloseIcon } from './icons.jsx'
+import { downloadFindings } from './exportFindings.js'
+import { CloseIcon, MinimizeIcon } from './icons.jsx'
 import StatusBadge from './StatusBadge.jsx'
 
 const STATUS_FILTERS = [
@@ -64,59 +65,80 @@ function ResultsSummary({ findings, activeFilter, onToggleFilter }) {
   )
 }
 
-export default function ResultsPanel({ family, entity, findings, error, statusFilter, onToggleStatusFilter, onDismiss }) {
+export default function ResultsPanel({ family, entity, findings, error, statusFilter, onToggleStatusFilter, onMinimize, onClose }) {
   const hasProfiles = findings?.some((f) => f.evidence?.profile) ?? false
+  const filenameBase = `${family.family}_${entity}`.replace(/[^\w.-]+/g, '_')
 
   return (
-    <section className={`results-panel type-${family.entity_type}`}>
-      <div className="results-panel-head">
-        <h2>{family.label} <span className="results-panel-entity">— {entity}</span></h2>
-        <button type="button" className="drawer-close" onClick={onDismiss} aria-label="Dismiss results">
-          <CloseIcon />
-        </button>
-      </div>
-
-      {error && <p className="error-message">{error}</p>}
-
-      {findings && (
-        <>
-          <ResultsSummary findings={findings} activeFilter={statusFilter} onToggleFilter={onToggleStatusFilter} />
-          <div className="findings-table-wrap">
-            <table className="findings-table">
-              <thead>
-                <tr>
-                  <th>Source</th>
-                  <th>Status</th>
-                  <th>URL</th>
-                  {hasProfiles && <th>Profile</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {findings
-                  .filter((f) => !statusFilter || f.status === statusFilter)
-                  .map((f, i) => (
-                    <tr key={i}>
-                      <td>{f.source}</td>
-                      <td><StatusBadge status={f.status} /></td>
-                      <td>
-                        {f.url ? (
-                          <a href={f.url} target="_blank" rel="noreferrer">{f.url}</a>
-                        ) : f.evidence?.reason ? (
-                          <span className="muted">{f.evidence.reason}</span>
-                        ) : (
-                          <span className="muted">—</span>
-                        )}
-                      </td>
-                      {hasProfiles && (
-                        <td>{f.evidence?.profile ? <ProfileCell profile={f.evidence.profile} /> : <span className="muted">—</span>}</td>
-                      )}
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+    <>
+      <div className="results-modal-backdrop" onClick={onMinimize} />
+      <section className={`results-modal type-${family.entity_type}`} role="dialog" aria-modal="true">
+        <div className="results-modal-head">
+          <h2>{family.label} <span className="results-panel-entity">— {entity}</span></h2>
+          <div className="results-modal-head-actions">
+            {findings && findings.length > 0 && (
+              <>
+                <button type="button" className="action-button" onClick={() => downloadFindings(findings, filenameBase, 'csv')}>
+                  Export CSV
+                </button>
+                <button type="button" className="action-button" onClick={() => downloadFindings(findings, filenameBase, 'json')}>
+                  Export JSON
+                </button>
+              </>
+            )}
+            <button type="button" className="drawer-close" onClick={onMinimize} aria-label="Minimize (keep in tray)">
+              <MinimizeIcon />
+            </button>
+            <button type="button" className="drawer-close" onClick={onClose} aria-label="Close and discard">
+              <CloseIcon />
+            </button>
           </div>
-        </>
-      )}
-    </section>
+        </div>
+
+        <div className="results-modal-body">
+          {error && <p className="error-message">{error}</p>}
+
+          {findings && (
+            <>
+              <ResultsSummary findings={findings} activeFilter={statusFilter} onToggleFilter={onToggleStatusFilter} />
+              <div className="findings-table-wrap">
+                <table className="findings-table">
+                  <thead>
+                    <tr>
+                      <th>Source</th>
+                      <th>Status</th>
+                      <th>URL</th>
+                      {hasProfiles && <th>Profile</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {findings
+                      .filter((f) => !statusFilter || f.status === statusFilter)
+                      .map((f, i) => (
+                        <tr key={i}>
+                          <td>{f.source}</td>
+                          <td><StatusBadge status={f.status} /></td>
+                          <td>
+                            {f.url ? (
+                              <a href={f.url} target="_blank" rel="noreferrer">{f.url}</a>
+                            ) : f.evidence?.reason ? (
+                              <span className="muted">{f.evidence.reason}</span>
+                            ) : (
+                              <span className="muted">—</span>
+                            )}
+                          </td>
+                          {hasProfiles && (
+                            <td>{f.evidence?.profile ? <ProfileCell profile={f.evidence.profile} /> : <span className="muted">—</span>}</td>
+                          )}
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+    </>
   )
 }

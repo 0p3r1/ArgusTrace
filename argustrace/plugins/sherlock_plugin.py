@@ -80,6 +80,8 @@ class SherlockPlugin:
             "--print-all",
             "--timeout", str(timeout),
         ]
+        if options.get("nsfw"):
+            args.append("--nsfw")
         for site in self.sites or []:
             args += ["--site", site]
         return args

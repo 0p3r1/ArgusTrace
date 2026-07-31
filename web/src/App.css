@@ -15,6 +15,7 @@
   justify-content: center;
   gap: 10px;
   color: var(--accent);
+  text-decoration: none;
 }
 
 .brand h1 {
@@ -94,50 +95,129 @@
   color: var(--accent-contrast);
 }
 
-.tool-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px;
+/* ---- Tool browser (search/filter + compact row list, scales to ~200 tools) ---- */
+
+.tool-browser {
   margin-bottom: 20px;
 }
 
-.tool-card {
-  text-align: left;
-  cursor: pointer;
-  background: var(--bg);
+.tool-search {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px 14px;
-  font: inherit;
-  color: var(--text);
-  transition: border-color 0.15s, background 0.15s;
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text-h);
+  margin-bottom: 10px;
 }
 
-.tool-card:hover {
-  background: var(--surface-hover);
-}
-
-.tool-card:focus-visible {
+.tool-search:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
-.tool-card.selected {
+.fast-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px;
+  background: var(--bg);
+}
+
+.tool-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.tool-row:hover {
+  background: var(--surface-hover);
+}
+
+.tool-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.tool-row.selected {
   border-color: var(--accent);
   background: var(--accent-bg);
 }
 
-.tool-card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.tool-label {
+.tool-row-label,
+.selected-tool-label {
   font-weight: 600;
   color: var(--text-h);
   font-size: 14px;
+  white-space: nowrap;
+}
+
+.tool-row-description {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-row-details {
+  font-size: 12px;
+  color: var(--accent);
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.tool-row-details:hover {
+  text-decoration: underline;
+}
+
+.fast-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--found);
+  background: var(--found-bg);
+  border-radius: 6px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+.no-results {
+  padding: 12px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.selected-tool-panel {
+  margin-bottom: 16px;
+}
+
+.selected-tool-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .tool-speed {
@@ -145,13 +225,6 @@
   color: var(--text-muted);
   font-family: var(--mono);
   white-space: nowrap;
-}
-
-.tool-description {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin: 6px 0 10px;
-  line-height: 1.4;
 }
 
 .tool-entity {
@@ -182,6 +255,99 @@
 .variant-select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/* ---- Advanced options ---- */
+
+.advanced-options {
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.advanced-options summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.advanced-options-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.option-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.option-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.option-flag {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.option-tag {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+.option-tag.required {
+  color: var(--behind);
+  background: var(--behind-bg);
+}
+
+.option-tag.optional {
+  color: var(--text-muted);
+  background: var(--surface-hover);
+}
+
+.option-description {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.option-field input[type='text'],
+.option-field input[type='number'],
+.option-field select {
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text-h);
+  max-width: 260px;
+}
+
+.option-multi-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.option-multi-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text);
 }
 
 .submit-button {
@@ -289,6 +455,72 @@
   color: var(--text-muted);
 }
 
+/* ---- Tool info page ---- */
+
+.tool-info-page {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.back-link {
+  display: inline-block;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+  margin-bottom: 16px;
+}
+
+.back-link:hover {
+  color: var(--accent);
+}
+
+.tool-info-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.tool-info-description {
+  color: var(--text);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.tool-info-section {
+  margin: 20px 0;
+}
+
+.tool-info-section h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.variant-list,
+.option-info-list,
+.example-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.example-list code {
+  font-family: var(--mono);
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
 /* ---- Status badge (shared colors: FOUND / NOT_FOUND / ERROR) ---- */
 
 .status-badge {
@@ -317,4 +549,79 @@
 .status-badge.status-error {
   color: var(--error);
   background: var(--error-bg);
+}
+
+/* ---- Version badge ---- */
+
+.version-badge-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.version-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+/* Compact form (in tool rows): an empty pill renders as a plain dot. */
+.version-pill:empty {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+}
+
+.version-pill:not(:empty) {
+  padding: 3px 10px;
+}
+
+.version-pill.version-current {
+  color: var(--found);
+  background: var(--found-bg);
+}
+
+.version-pill.version-behind {
+  color: var(--behind);
+  background: var(--behind-bg);
+}
+
+.version-pill.version-outdated {
+  color: var(--outdated);
+  background: var(--outdated-bg);
+}
+
+.version-pill.version-unknown {
+  color: var(--text-muted);
+  background: var(--surface-hover);
+}
+
+.version-na {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.version-check-button {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.version-check-button:hover {
+  background: var(--surface-hover);
+}
+
+.version-check-button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }

@@ -7,5 +7,5 @@ class Plugin(Protocol):
     name: str
     supported_entities: list[str]
 
-    async def run(self, entity: str) -> list[Finding]:
+    async def run(self, entity: str, options: dict | None = None) -> list[Finding]:
         ...

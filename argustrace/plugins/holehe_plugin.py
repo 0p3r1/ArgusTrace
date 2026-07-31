@@ -16,7 +16,7 @@ class HolehePlugin:
     name = "holehe"
     supported_entities = ["email"]
 
-    async def run(self, entity: str) -> list[Finding]:
+    async def run(self, entity: str, options: dict | None = None) -> list[Finding]:
         if not ENTITY_PATTERN.match(entity):
             return [self._error(entity, "invalid entity: does not look like an email address")]
 

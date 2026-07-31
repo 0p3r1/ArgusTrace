@@ -12,6 +12,13 @@ ENTITY_PATTERN = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")
 FAST_RUN_TIMEOUT_S = 60
 FULL_RUN_TIMEOUT_S = 900  # not benchmarked to completion: 3000+ sites, duration varies a lot
 
+DEFAULT_SITE_TIMEOUT_S = 30
+SITE_TIMEOUT_MIN_S = 5
+SITE_TIMEOUT_MAX_S = 60
+DEFAULT_RETRIES = 0
+RETRIES_MIN = 0
+RETRIES_MAX = 3
+
 # Maigret's own per-site status, mapped onto our tri-state Status.
 SITE_STATUS_MAP = {
     "Claimed": Status.FOUND,
@@ -29,18 +36,12 @@ class MaigretPlugin:
         self.top_sites = top_sites
         self.run_timeout_s = FAST_RUN_TIMEOUT_S if top_sites else FULL_RUN_TIMEOUT_S
 
-    async def run(self, entity: str) -> list[Finding]:
+    async def run(self, entity: str, options: dict | None = None) -> list[Finding]:
         if not ENTITY_PATTERN.match(entity):
             return [self._error(entity, "invalid entity: must match " + ENTITY_PATTERN.pattern)]
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            args = [
-                entity,
-                "--csv",
-                "--folderoutput", "/output",
-                "--no-progressbar",
-            ]
-            args += ["-a"] if self.top_sites is None else ["--top-sites", str(self.top_sites)]
+            args = self._build_args(entity, options)
 
             result = await run_hardened(
                 IMAGE, args,
@@ -60,6 +61,37 @@ class MaigretPlugin:
                 return [self._error(entity, "maigret produced no CSV output")]
 
             return self._parse_csv(entity, csv_path)
+
+    def _build_args(self, entity: str, options: dict | None) -> list[str]:
+        options = options or {}
+
+        try:
+            timeout = int(options.get("timeout", DEFAULT_SITE_TIMEOUT_S))
+        except (TypeError, ValueError):
+            timeout = DEFAULT_SITE_TIMEOUT_S
+        timeout = max(SITE_TIMEOUT_MIN_S, min(SITE_TIMEOUT_MAX_S, timeout))
+
+        try:
+            retries = int(options.get("retries", DEFAULT_RETRIES))
+        except (TypeError, ValueError):
+            retries = DEFAULT_RETRIES
+        retries = max(RETRIES_MIN, min(RETRIES_MAX, retries))
+
+        tags = options.get("tags")
+        tags = tags.strip() if isinstance(tags, str) and tags.strip() else None
+
+        args = [
+            entity,
+            "--csv",
+            "--folderoutput", "/output",
+            "--no-progressbar",
+            "--timeout", str(timeout),
+            "--retries", str(retries),
+        ]
+        if tags:
+            args += ["--tags", tags]
+        args += ["-a"] if self.top_sites is None else ["--top-sites", str(self.top_sites)]
+        return args
 
     def _parse_csv(self, entity: str, csv_path: Path) -> list[Finding]:
         findings = []

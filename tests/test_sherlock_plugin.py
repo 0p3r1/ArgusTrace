@@ -35,3 +35,28 @@ def test_parse_csv_maps_every_sherlock_status(tmp_path: Path):
     assert by_source["sherlock:SomeSite"].status == Status.NOT_FOUND
     assert by_source["sherlock:Flaky"].status == Status.ERROR
     assert by_source["sherlock:Blocked"].status == Status.ERROR
+
+
+def test_build_args_uses_default_timeout_when_no_options_given():
+    plugin = SherlockPlugin(sites=["GitHub"])
+    args = plugin._build_args("alice", None)
+    assert "--timeout" in args
+    assert args[args.index("--timeout") + 1] == "15"
+
+
+def test_build_args_uses_custom_timeout():
+    plugin = SherlockPlugin(sites=["GitHub"])
+    args = plugin._build_args("alice", {"timeout": 25})
+    assert args[args.index("--timeout") + 1] == "25"
+
+
+def test_build_args_clamps_out_of_range_timeout():
+    plugin = SherlockPlugin(sites=["GitHub"])
+    args = plugin._build_args("alice", {"timeout": 999})
+    assert args[args.index("--timeout") + 1] == "30"
+
+
+def test_build_args_ignores_invalid_timeout_type():
+    plugin = SherlockPlugin(sites=["GitHub"])
+    args = plugin._build_args("alice", {"timeout": "not-a-number"})
+    assert args[args.index("--timeout") + 1] == "15"

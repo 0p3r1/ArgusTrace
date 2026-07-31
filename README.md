@@ -47,8 +47,10 @@ propagates as an exception.
   (timeout, rate-limit, crash). Never conflate the two — an `ERROR` reported
   as `NOT_FOUND` is a false negative.
 - **`Plugin` is a `Protocol`**, not a base class: `name`, `supported_entities`,
-  and `async def run(entity: str) -> list[Finding]`. Any object with that
-  shape works as a plugin, no inheritance required.
+  and `async def run(entity: str, options: dict | None = None) -> list[Finding]`.
+  Any object with that shape works as a plugin, no inheritance required.
+  `options` carries real, per-tool CLI flags (declared in `TOOL_FAMILIES`,
+  see below) — a plugin with nothing meaningful to expose just ignores it.
 - **Every plugin must catch its own failures.** `run()` should never raise —
   timeouts, missing binaries, bad output, etc. must come back as a
   `Finding(status=ERROR)` so one broken plugin can't take down a run.
@@ -70,8 +72,9 @@ argustrace/
 │   ├── ignorant_plugin.py  # runs Ignorant in a hardened Docker container
 │   ├── crtsh_plugin.py     # queries crt.sh (Certificate Transparency) in a container
 │   └── theharvester_plugin.py  # runs theHarvester in a hardened Docker container
+├── versioning.py         # on-demand PyPI/Docker Hub/GitHub release checks
 ├── cli.py                # `investigate` command
-└── api.py                # FastAPI app: GET /api/plugins, POST /api/investigate
+└── api.py                # FastAPI app: /api/plugins, /api/investigate, /api/tools/{family}/version-check
 
 docker/
 ├── holehe/
@@ -135,20 +138,72 @@ Output is a JSON array of `Finding` objects.
 
 ## Web app
 
-A minimal FastAPI backend + React/Vite frontend expose the same
-`PLUGINS` registry as the CLI, so there's exactly one place a plugin is
-registered. Run both in separate terminals:
+A FastAPI backend + React/Vite frontend expose the same `PLUGINS` /
+`TOOL_FAMILIES` registry as the CLI, so there's exactly one place a plugin
+is registered. Run both in separate terminals:
 
 ```bash
 uv run uvicorn argustrace.api:app --port 8000    # backend: http://127.0.0.1:8000
 cd web && npm run dev                             # frontend: http://localhost:5173
 ```
 
-Open `http://localhost:5173`, pick a plugin, enter an entity, and submit —
-the request blocks until the plugin finishes (same as the CLI; no
-background job queue yet, so `sherlock-full` will hold the request open
-for 1-3 minutes). FastAPI's interactive docs are at
-`http://127.0.0.1:8000/docs`.
+Requests block until the plugin finishes (same as the CLI; no background
+job queue yet, so `sherlock-full` will hold the request open for 1-3
+minutes). FastAPI's interactive docs are at `http://127.0.0.1:8000/docs`.
+
+Built to stay usable well past today's 7 tools:
+
+- **Search + filter tool browser** (`ToolBrowser.jsx`): a text search over
+  name/description, entity-type filter chips, and a "fast only" toggle,
+  rendering compact single-line rows instead of a card grid. No
+  virtualization or server-side search — verified to hold up fine at a
+  simulated ~200 rows with plain client-side filtering; the card grid's
+  actual scaling problem was per-card footprint, not row count.
+- **Advanced options** (`AdvancedOptionsPanel.jsx`): a form generated from
+  each family's `options` schema (int/str/bool/enum/enum_multi, each with
+  a description and a required/optional tag), collapsed by default. Only
+  real, safe CLI flags are exposed — nothing that only makes sense for a
+  format we don't use (`--html`, `--pdf`, ...) or that needs an API key we
+  don't provision.
+- **Fast badge**: a boolean `fast` per variant (kept alongside the
+  existing human-readable `speed` string) shown as a small ⚡ badge.
+- **Version badges** (`VersionBadge.jsx`): green/orange/red/gray pill per
+  tool, plus a "Check version" button. Checking is **on-demand, per tool**
+  — there is no background refresh or scheduler; a server restart resets
+  every badge to gray until re-checked by hand. See "Version checking"
+  below.
+- **Tool info pages** (`/tools/:family`, via `react-router-dom`):
+  description, GitHub/docs links, variants, options, example entities,
+  and a "Use this tool" button that hands off to `/` with that family and
+  variant preselected via query params (`?family=...&variant=...`).
+
+## Version checking
+
+Each tool family declares a `version_check` (`argustrace/versioning.py`):
+`pypi` (package name), `dockerhub` (repository), `github_releases` (repo),
+or `none` for things that aren't a versioned tool at all — crt.sh (a live
+web service) and the mock demo. Checking is triggered per tool by a human
+clicking "Check version" (`POST /api/tools/{family}/version-check`); there
+is **no scheduler and no auto-refresh** — that was ruled out early in this
+project, and a version check is no exception. Results are cached in
+memory only (no persistence), so a restart resets every badge to gray.
+
+Status is classified by *index* in the real, fetched release list (newest
+first), not semver arithmetic: pinned == latest → current; one behind →
+behind; more than one behind → outdated; pinned not found in the fetched
+list (renamed, yanked, or a partial fetch) → **unknown, never a guessed
+"outdated"**. Any network/HTTP failure is caught at the checker boundary
+and also becomes unknown — the same discipline this project already
+applies to Docker failures (`ok=False` → `ERROR`, never an inferred
+negative result), applied here to version staleness.
+
+One real gap this surfaced: Sherlock and Maigret are pinned by Docker
+image **digest**, not a version string, so each has a `pinned_version`
+constant recorded separately in `registry.py` next to the digest — bumping
+one must bump the other by hand. Maigret's own Docker tags turned out to
+be git-commit SHAs (not semver), discovered by checking the real Docker
+Hub API before wiring anything up — its version is checked via PyPI
+instead, where the project does publish clean semver releases.
 
 ## The Sherlock plugin
 
@@ -289,9 +344,11 @@ results at all → `NOT_FOUND`; a failed run → `ERROR`.
 uv run pytest -v
 ```
 
-Tests lock the `Status`/`Finding`/`Plugin` contracts using `MockPlugin`, plus
-the entity validation and result-to-`Status` mapping logic of every real
-plugin (Sherlock, Maigret, Holehe, Ignorant, crt.sh, theHarvester) against
-fixture data — none of it needs Docker or network access. Actually running
-these tools against real targets is exercised manually, not in the
-automated suite.
+Tests lock the `Status`/`Finding`/`Plugin` contracts using `MockPlugin`,
+the entity validation, option-composition (default/custom/clamped), and
+result-to-`Status` mapping logic of every real plugin, and the version
+classification rules in `test_versioning.py` (current/behind/outdated/
+unknown-on-error/pinned-not-found, with `httpx.MockTransport` standing in
+for PyPI/Docker Hub/GitHub) — none of it needs Docker or network access.
+Actually running these tools and their live version checks against real
+targets is exercised manually, not in the automated suite.

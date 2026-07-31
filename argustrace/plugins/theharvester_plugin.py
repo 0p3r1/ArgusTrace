@@ -17,6 +17,11 @@ BROAD_SOURCES = "rapiddns,otx,hackertarget,crtsh"
 FAST_RUN_TIMEOUT_S = 45
 BROAD_RUN_TIMEOUT_S = 120
 
+DEFAULT_LIMIT = 500
+LIMIT_MIN = 100
+LIMIT_MAX = 1000
+ALLOWED_SOURCES = {"rapiddns", "otx", "hackertarget", "crtsh"}
+
 
 class TheHarvesterPlugin:
     name = "theharvester"
@@ -26,12 +31,12 @@ class TheHarvesterPlugin:
         self.sources = sources
         self.run_timeout_s = FAST_RUN_TIMEOUT_S if sources == FAST_SOURCES else BROAD_RUN_TIMEOUT_S
 
-    async def run(self, entity: str) -> list[Finding]:
+    async def run(self, entity: str, options: dict | None = None) -> list[Finding]:
         if not ENTITY_PATTERN.match(entity):
             return [self._error(entity, "invalid entity: does not look like a domain name")]
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            args = ["-d", entity, "-b", self.sources, "-f", "/output/report"]
+            args = self._build_args(entity, options)
 
             result = await run_hardened(
                 IMAGE, args,
@@ -56,6 +61,24 @@ class TheHarvesterPlugin:
                 return [self._error(entity, "theHarvester produced unparseable JSON")]
 
             return self._parse_report(entity, data)
+
+    def _build_args(self, entity: str, options: dict | None) -> list[str]:
+        options = options or {}
+
+        try:
+            limit = int(options.get("limit", DEFAULT_LIMIT))
+        except (TypeError, ValueError):
+            limit = DEFAULT_LIMIT
+        limit = max(LIMIT_MIN, min(LIMIT_MAX, limit))
+
+        sources_override = options.get("sources")
+        if isinstance(sources_override, list):
+            valid = [s for s in sources_override if s in ALLOWED_SOURCES]
+            sources = ",".join(valid) if valid else self.sources
+        else:
+            sources = self.sources
+
+        return ["-d", entity, "-b", sources, "-l", str(limit), "-f", "/output/report"]
 
     def _parse_report(self, entity: str, data: dict) -> list[Finding]:
         # A single host can have multiple DNS records (A + AAAA, dual-stack);

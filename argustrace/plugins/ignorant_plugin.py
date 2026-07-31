@@ -13,7 +13,7 @@ class IgnorantPlugin:
     name = "ignorant"
     supported_entities = ["phone"]
 
-    async def run(self, entity: str) -> list[Finding]:
+    async def run(self, entity: str, options: dict | None = None) -> list[Finding]:
         try:
             parsed = phonenumbers.parse(entity, None)
         except phonenumbers.NumberParseException:

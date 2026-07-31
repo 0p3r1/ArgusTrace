@@ -19,7 +19,9 @@ CURATED_SITES = [
 
 FAST_RUN_TIMEOUT_S = 60
 FULL_RUN_TIMEOUT_S = 240
-SITE_TIMEOUT_S = "15"
+DEFAULT_SITE_TIMEOUT_S = 15
+SITE_TIMEOUT_MIN_S = 5
+SITE_TIMEOUT_MAX_S = 30
 
 # Sherlock's own per-site status, mapped onto our tri-state Status.
 # "Illegal" means the username doesn't match that site's naming rules,
@@ -41,21 +43,12 @@ class SherlockPlugin:
         self.sites = sites
         self.run_timeout_s = FAST_RUN_TIMEOUT_S if sites else FULL_RUN_TIMEOUT_S
 
-    async def run(self, entity: str) -> list[Finding]:
+    async def run(self, entity: str, options: dict | None = None) -> list[Finding]:
         if not ENTITY_PATTERN.match(entity):
             return [self._error(entity, "invalid entity: must match " + ENTITY_PATTERN.pattern)]
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            args = [
-                entity,
-                "--csv",
-                "--folderoutput", "/output",
-                "--no-txt",
-                "--print-all",
-                "--timeout", SITE_TIMEOUT_S,
-            ]
-            for site in self.sites or []:
-                args += ["--site", site]
+            args = self._build_args(entity, options)
 
             result = await run_hardened(
                 IMAGE, args, volume=(tmpdir, "/output"), timeout_s=self.run_timeout_s,
@@ -70,6 +63,26 @@ class SherlockPlugin:
                 return [self._error(entity, "sherlock produced no CSV output")]
 
             return self._parse_csv(entity, csv_path)
+
+    def _build_args(self, entity: str, options: dict | None) -> list[str]:
+        options = options or {}
+        try:
+            timeout = int(options.get("timeout", DEFAULT_SITE_TIMEOUT_S))
+        except (TypeError, ValueError):
+            timeout = DEFAULT_SITE_TIMEOUT_S
+        timeout = max(SITE_TIMEOUT_MIN_S, min(SITE_TIMEOUT_MAX_S, timeout))
+
+        args = [
+            entity,
+            "--csv",
+            "--folderoutput", "/output",
+            "--no-txt",
+            "--print-all",
+            "--timeout", str(timeout),
+        ]
+        for site in self.sites or []:
+            args += ["--site", site]
+        return args
 
     def _parse_csv(self, entity: str, csv_path: Path) -> list[Finding]:
         findings = []

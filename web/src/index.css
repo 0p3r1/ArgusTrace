@@ -17,6 +17,14 @@
   --error: #b45309;
   --error-bg: rgba(180, 83, 9, 0.1);
 
+  /* Version staleness — deliberately distinct from --error: a Finding's
+     ERROR means "couldn't verify" (amber, not alarming); an outdated tool
+     version is a confirmed fact, so it earns a more saturated orange/red. */
+  --behind: #c2660a;
+  --behind-bg: rgba(194, 102, 10, 0.1);
+  --outdated: #dc2626;
+  --outdated-bg: rgba(220, 38, 38, 0.1);
+
   --shadow: 0 1px 2px rgba(20, 23, 28, 0.04), 0 8px 24px rgba(20, 23, 28, 0.06);
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -51,6 +59,11 @@
     --not-found-bg: rgba(139, 147, 161, 0.1);
     --error: #fbbf24;
     --error-bg: rgba(251, 191, 36, 0.12);
+
+    --behind: #fb923c;
+    --behind-bg: rgba(251, 146, 60, 0.14);
+    --outdated: #f87171;
+    --outdated-bg: rgba(248, 113, 113, 0.14);
 
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
   }

@@ -5,7 +5,7 @@ class MockPlugin:
     name = "mock"
     supported_entities = ["email", "username"]
 
-    async def run(self, entity: str) -> list[Finding]:
+    async def run(self, entity: str, options: dict | None = None) -> list[Finding]:
         return [
             Finding(
                 entity=entity,

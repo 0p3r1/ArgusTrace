@@ -32,3 +32,32 @@ def test_parse_csv_maps_every_maigret_status(tmp_path: Path):
     assert by_source["maigret:Spotify"].status == Status.NOT_FOUND
     assert by_source["maigret:Reddit"].status == Status.ERROR
     assert by_source["maigret:Reddit"].evidence["error_reason"] == "Access denied"
+
+
+def test_build_args_defaults():
+    plugin = MaigretPlugin()
+    args = plugin._build_args("alice", None)
+    assert args[args.index("--timeout") + 1] == "30"
+    assert args[args.index("--retries") + 1] == "0"
+    assert "--tags" not in args
+
+
+def test_build_args_custom_values():
+    plugin = MaigretPlugin()
+    args = plugin._build_args("alice", {"timeout": 45, "retries": 2, "tags": "photo,gaming"})
+    assert args[args.index("--timeout") + 1] == "45"
+    assert args[args.index("--retries") + 1] == "2"
+    assert args[args.index("--tags") + 1] == "photo,gaming"
+
+
+def test_build_args_clamps_out_of_range_values():
+    plugin = MaigretPlugin()
+    args = plugin._build_args("alice", {"timeout": 999, "retries": 99})
+    assert args[args.index("--timeout") + 1] == "60"
+    assert args[args.index("--retries") + 1] == "3"
+
+
+def test_build_args_ignores_blank_tags():
+    plugin = MaigretPlugin()
+    args = plugin._build_args("alice", {"tags": "   "})
+    assert "--tags" not in args

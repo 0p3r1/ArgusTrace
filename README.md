@@ -122,19 +122,29 @@ cd web && npm install
 ## Usage
 
 ```bash
-uv run python -m argustrace.cli <entity> --plugin mock                  # no network, proves the pipeline
-uv run python -m argustrace.cli <username> --plugin sherlock            # curated ~10-site list, a few seconds
-uv run python -m argustrace.cli <username> --plugin sherlock-full       # full ~400+ site scan, 1-3 minutes
-uv run python -m argustrace.cli <username> --plugin maigret             # top ~15 sites, a few seconds
-uv run python -m argustrace.cli <username> --plugin maigret-full        # full ~3000+ site scan, several minutes
-uv run python -m argustrace.cli <email> --plugin holehe                 # ~120 sites, ~10 seconds
-uv run python -m argustrace.cli <phone> --plugin ignorant                # 3 sites, E164 format e.g. +33612345678
-uv run python -m argustrace.cli <domain> --plugin crtsh                  # Certificate Transparency logs
-uv run python -m argustrace.cli <domain> --plugin theharvester           # 1 free passive-recon source
-uv run python -m argustrace.cli <domain> --plugin theharvester-broad     # 4 free sources combined
+uv run python -m argustrace.cli investigate <entity> --plugin mock                  # no network, proves the pipeline
+uv run python -m argustrace.cli investigate <username> --plugin sherlock            # curated ~10-site list, a few seconds
+uv run python -m argustrace.cli investigate <username> --plugin sherlock-full       # full ~400+ site scan, 1-3 minutes
+uv run python -m argustrace.cli investigate <username> --plugin maigret             # top ~15 sites, a few seconds
+uv run python -m argustrace.cli investigate <username> --plugin maigret-full        # full ~3000+ site scan, several minutes
+uv run python -m argustrace.cli investigate <email> --plugin holehe                 # ~120 sites, ~10 seconds
+uv run python -m argustrace.cli investigate <phone> --plugin ignorant                # 3 sites, E164 format e.g. +33612345678
+uv run python -m argustrace.cli investigate <domain> --plugin crtsh                  # Certificate Transparency logs
+uv run python -m argustrace.cli investigate <domain> --plugin theharvester           # 1 free passive-recon source
+uv run python -m argustrace.cli investigate <domain> --plugin theharvester-broad     # 4 free sources combined
 ```
 
 Output is a JSON array of `Finding` objects.
+
+Every option exposed in the web UI is also available from the CLI via
+repeatable `--option`/`-o name=value` flags — run
+`uv run python -m argustrace.cli options <plugin>` to see what's available
+for a given plugin, or with no argument to list every plugin/variant:
+
+```bash
+uv run python -m argustrace.cli options maigret
+uv run python -m argustrace.cli investigate <username> --plugin maigret -o timeout=45 -o enrich=true
+```
 
 ## Web app
 

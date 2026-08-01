@@ -1,3 +1,4 @@
+import ast
 import csv
 import glob
 import re
@@ -59,6 +60,25 @@ class HolehePlugin:
                 else:
                     status = Status.NOT_FOUND
 
+                evidence = {
+                    "domain": row["domain"],
+                    "method": row["method"],
+                    "rate_limited": row["rateLimit"],
+                }
+
+                recovery_hint = {
+                    k: v for k, v in {
+                        "email": row.get("emailrecovery"),
+                        "phone": row.get("phoneNumber"),
+                    }.items() if v and v != "None"
+                }
+                if recovery_hint:
+                    evidence["recovery_hint"] = recovery_hint
+
+                profile = self._parse_others(row.get("others"))
+                if profile:
+                    evidence["profile"] = profile
+
                 findings.append(
                     Finding(
                         entity=entity,
@@ -66,14 +86,23 @@ class HolehePlugin:
                         source=f"holehe:{row['name']}",
                         status=status,
                         url=f"https://{row['domain']}" if row["domain"] else None,
-                        evidence={
-                            "domain": row["domain"],
-                            "method": row["method"],
-                            "rate_limited": row["rateLimit"],
-                        },
+                        evidence=evidence,
                     )
                 )
         return findings
+
+    def _parse_others(self, raw: str | None) -> dict | None:
+        # holehe's "others" CSV column is a Python dict repr (e.g. modules
+        # that expose a FullName or account-creation date write it via
+        # str(the_dict)), not JSON — ast.literal_eval is the safe way to
+        # read that back.
+        if not raw or raw == "None":
+            return None
+        try:
+            parsed = ast.literal_eval(raw)
+        except (ValueError, SyntaxError):
+            return None
+        return parsed if isinstance(parsed, dict) and parsed else None
 
     def _error(self, entity: str, reason: str) -> Finding:
         return Finding(

@@ -1,3 +1,4 @@
+import { API_BASE } from './api.js'
 import { downloadFindings } from './exportFindings.js'
 import { CloseIcon, MinimizeIcon } from './icons.jsx'
 import StatusBadge from './StatusBadge.jsx'
@@ -68,6 +69,7 @@ function ResultsSummary({ findings, activeFilter, onToggleFilter }) {
 export default function ResultsPanel({ family, entity, findings, error, statusFilter, onToggleStatusFilter, onMinimize, onClose }) {
   const hasProfiles = findings?.some((f) => f.evidence?.profile) ?? false
   const filenameBase = `${family.family}_${entity}`.replace(/[^\w.-]+/g, '_')
+  const nativeActions = family.native_reports.filter((r) => r.available && r.kind !== 'info')
 
   return (
     <>
@@ -94,6 +96,39 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
             </button>
           </div>
         </div>
+
+        {nativeActions.length > 0 && (
+          <div className="results-native-reports">
+            <span className="results-native-reports-label">Native reports:</span>
+            {nativeActions.map((r) =>
+              r.kind === 'download' ? (
+                <a
+                  key={r.format}
+                  className="action-button"
+                  href={`${API_BASE}/api/tools/${family.family}/report?entity=${encodeURIComponent(entity)}&format=${r.format}`}
+                  download
+                  title={r.note}
+                >
+                  {r.label}
+                </a>
+              ) : (
+                <a
+                  key={r.format}
+                  className="action-button"
+                  href={r.url_template.replace('{entity}', encodeURIComponent(entity))}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={r.note}
+                >
+                  {r.label} ↗
+                </a>
+              )
+            )}
+            {nativeActions.some((r) => r.kind === 'download') && (
+              <span className="results-native-reports-hint">downloads re-run the tool, can take a few seconds</span>
+            )}
+          </div>
+        )}
 
         <div className="results-modal-body">
           {error && <p className="error-message">{error}</p>}

@@ -1,13 +1,13 @@
 from datetime import datetime
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from argustrace import versioning
 from argustrace.core.models import Finding
-from argustrace.plugins.registry import PLUGINS, TOOL_FAMILIES
+from argustrace.plugins.registry import NATIVE_REPORT_GENERATORS, PLUGINS, TOOL_FAMILIES
 
 app = FastAPI(title="ArgusTrace")
 
@@ -58,6 +58,16 @@ class ToolExample(BaseModel):
     entity: str
 
 
+class NativeReport(BaseModel):
+    format: str
+    label: str
+    kind: Literal["download", "link", "info"]
+    available: bool
+    note: str
+    mime: str | None = None
+    url_template: str | None = None
+
+
 class ToolFamily(BaseModel):
     family: str
     label: str
@@ -65,6 +75,7 @@ class ToolFamily(BaseModel):
     description: str
     variants: list[ToolVariant]
     options: list[ToolOption] = []
+    native_reports: list[NativeReport] = []
     version: VersionInfo
     repo_url: str | None = None
     docs_url: str | None = None
@@ -100,6 +111,7 @@ def list_plugins() -> list[ToolFamily]:
                 for key, variant in info["variants"].items()
             ],
             options=[ToolOption(**opt) for opt in info["options"]],
+            native_reports=[NativeReport(**r) for r in info.get("native_reports", [])],
             version=_version_info(family, info["version_check"]),
             repo_url=info["repo_url"],
             docs_url=info["docs_url"],
@@ -131,3 +143,35 @@ async def investigate(req: InvestigateRequest) -> list[Finding]:
     if selected is None:
         raise HTTPException(status_code=404, detail=f"unknown plugin: {req.plugin}")
     return await selected.run(req.entity, req.options)
+
+
+@app.get("/api/tools/{family}/report")
+async def get_native_report(family: str, entity: str, format: str) -> Response:
+    info = TOOL_FAMILIES.get(family)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"unknown tool family: {family}")
+
+    entry = next(
+        (r for r in info.get("native_reports", []) if r["format"] == format and r["kind"] == "download"),
+        None,
+    )
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"no downloadable {format!r} report for {family!r}")
+    if not entry["available"]:
+        raise HTTPException(status_code=400, detail=f"{family!r} {format!r} report is not available: {entry['note']}")
+
+    generator = NATIVE_REPORT_GENERATORS.get(family)
+    if generator is None:
+        raise HTTPException(status_code=500, detail=f"{family!r} has no report generator wired up")
+
+    # On-demand only — this re-runs the tool fresh, nothing is cached.
+    try:
+        content = await generator(entity, format)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return Response(
+        content=content,
+        media_type=entry["mime"],
+        headers={"Content-Disposition": f'attachment; filename="{family}_{entity}.{format}"'},
+    )

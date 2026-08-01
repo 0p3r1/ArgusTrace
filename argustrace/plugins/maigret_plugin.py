@@ -160,3 +160,39 @@ class MaigretPlugin:
             status=Status.ERROR,
             evidence={"reason": reason},
         )
+
+
+# Native report generation: a separate, optional capability from the Plugin
+# protocol's run(). On-demand only — re-runs the scan fresh, no caching.
+REPORT_TOP_SITES = 15  # keep this supplementary action quick
+REPORT_FORMATS = {
+    "html": {"flag": "-H", "filename": "report_{entity}_plain.html"},
+}
+
+
+async def generate_report(entity: str, report_format: str) -> bytes:
+    if not ENTITY_PATTERN.match(entity):
+        raise ValueError("invalid entity: must match " + ENTITY_PATTERN.pattern)
+    spec = REPORT_FORMATS.get(report_format)
+    if spec is None:
+        raise ValueError(f"unsupported report format for maigret: {report_format!r}")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        args = [
+            entity, spec["flag"],
+            "--folderoutput", "/output",
+            "--no-progressbar",
+            "--top-sites", str(REPORT_TOP_SITES),
+        ]
+        result = await run_hardened(
+            IMAGE, args, volume=(tmpdir, "/output"), env={"HOME": "/tmp"}, timeout_s=FAST_RUN_TIMEOUT_S,
+        )
+        if not result.ok:
+            raise ValueError(result.error)
+        if result.returncode != 0:
+            raise ValueError(f"docker run failed: {result.stderr.decode(errors='replace')[:500]}")
+
+        report_path = Path(tmpdir) / spec["filename"].format(entity=entity)
+        if not report_path.exists():
+            raise ValueError(f"maigret produced no {report_format} output")
+        return report_path.read_bytes()

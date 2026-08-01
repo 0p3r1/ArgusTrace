@@ -131,3 +131,33 @@ class TheHarvesterPlugin:
             status=Status.ERROR,
             evidence={"reason": reason},
         )
+
+
+# Native report generation: a separate, optional capability from the Plugin
+# protocol's run(). On-demand only — re-runs the scan fresh, no caching.
+# theHarvester's `-f` always writes report.xml alongside report.json, so
+# this needs no extra flags — just reading the file run() already discards.
+REPORT_FORMATS = {"xml": {"filename": "report.xml"}}
+
+
+async def generate_report(entity: str, report_format: str) -> bytes:
+    if not ENTITY_PATTERN.match(entity):
+        raise ValueError("invalid entity: does not look like a domain name")
+    spec = REPORT_FORMATS.get(report_format)
+    if spec is None:
+        raise ValueError(f"unsupported report format for theharvester: {report_format!r}")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        args = ["-d", entity, "-b", FAST_SOURCES, "-l", str(DEFAULT_LIMIT), "-f", "/output/report"]
+        result = await run_hardened(
+            IMAGE, args, volume=(tmpdir, "/output"), env={"HOME": "/tmp"}, timeout_s=FAST_RUN_TIMEOUT_S,
+        )
+        if not result.ok:
+            raise ValueError(result.error)
+        if result.returncode != 0:
+            raise ValueError(f"docker run failed: {result.stderr.decode(errors='replace')[:500]}")
+
+        report_path = Path(tmpdir) / spec["filename"]
+        if not report_path.exists():
+            raise ValueError(f"theHarvester produced no {report_format} output")
+        return report_path.read_bytes()

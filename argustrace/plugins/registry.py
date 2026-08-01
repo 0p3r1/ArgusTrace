@@ -1,3 +1,4 @@
+from argustrace.plugins import maigret_plugin, theharvester_plugin
 from argustrace.plugins.crtsh_plugin import CrtShPlugin
 from argustrace.plugins.holehe_plugin import HolehePlugin
 from argustrace.plugins.ignorant_plugin import IgnorantPlugin
@@ -5,6 +6,15 @@ from argustrace.plugins.maigret_plugin import MaigretPlugin
 from argustrace.plugins.mock_plugin import MockPlugin
 from argustrace.plugins.sherlock_plugin import SherlockPlugin
 from argustrace.plugins.theharvester_plugin import BROAD_SOURCES, TheHarvesterPlugin
+
+# Native report generation is a separate, optional capability from the
+# Plugin protocol (see plugins/base.py) — a family only appears here if its
+# module exports a `generate_report(entity, format) -> bytes` function.
+# Always re-runs the tool fresh; nothing is cached.
+NATIVE_REPORT_GENERATORS = {
+    "maigret": maigret_plugin.generate_report,
+    "theharvester": theharvester_plugin.generate_report,
+}
 
 PLUGINS = {
     "mock": MockPlugin(),
@@ -48,6 +58,7 @@ TOOL_FAMILIES = {
             "mock": {"variant_label": "Default", "speed": "instant", "fast": True},
         },
         "options": [],
+        "native_reports": [],
         "version_check": {"method": "none"},
     },
     "sherlock": {
@@ -71,6 +82,21 @@ TOOL_FAMILIES = {
                 "name": "nsfw", "flag": "--nsfw", "type": "bool", "required": False,
                 "default": False,
                 "description": "Also check NSFW sites, excluded from the default site list.",
+            },
+        ],
+        "native_reports": [
+            {
+                "format": "csv", "label": "CSV", "kind": "info", "available": True,
+                "note": "Same data as our own CSV export below.",
+            },
+            {
+                "format": "xlsx", "label": "XLSX (Excel)", "kind": "download", "available": False,
+                "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "note": (
+                    "Sherlock writes this to a relative path outside --folderoutput "
+                    "(verified against the pinned image) — a quirk in Sherlock itself, "
+                    "incompatible with how we mount the container's output directory."
+                ),
             },
         ],
         # Pinned by image digest (see sherlock_plugin.IMAGE) at Sherlock v0.16.0.
@@ -125,6 +151,55 @@ TOOL_FAMILIES = {
                 ),
             },
         ],
+        "native_reports": [
+            {
+                "format": "csv", "label": "CSV", "kind": "info", "available": True,
+                "note": "Same data as our own CSV export below.",
+            },
+            {
+                "format": "json", "label": "JSON (simple/ndjson)", "kind": "info", "available": False,
+                "note": (
+                    "The extracted profile fields (photo, full name, location, ...) are "
+                    "already merged into our own JSON export below. Maigret's own JSON report "
+                    "also completely omits NOT_FOUND/ERROR sites, which ours doesn't."
+                ),
+            },
+            {
+                "format": "html", "label": "HTML report", "kind": "download", "available": True,
+                "mime": "text/html",
+                "note": "Narrative report: brief summary, cross-referenced tags/interests, extracted data per site.",
+            },
+            {
+                "format": "pdf", "label": "PDF report", "kind": "download", "available": False,
+                "mime": "application/pdf",
+                "note": "Needs Maigret's optional 'pdf' extra, not installed in the pinned image.",
+            },
+            {
+                "format": "xmind", "label": "XMind mindmap", "kind": "download", "available": False,
+                "mime": "application/octet-stream",
+                "note": "Needs an XMind viewer most users won't have; the HTML report covers the same data.",
+            },
+            {
+                "format": "graph", "label": "Graph report", "kind": "download", "available": False,
+                "mime": "application/octet-stream",
+                "note": "Niche/specialized output format, not currently generated.",
+            },
+            {
+                "format": "neo4j", "label": "Neo4j Cypher script", "kind": "download", "available": False,
+                "mime": "text/plain",
+                "note": "Needs a Neo4j instance to be useful; not currently generated.",
+            },
+            {
+                "format": "md", "label": "Markdown report", "kind": "download", "available": False,
+                "mime": "text/markdown",
+                "note": "Strictly less information than the HTML report above; not currently generated.",
+            },
+            {
+                "format": "txt", "label": "TXT report", "kind": "download", "available": False,
+                "mime": "text/plain",
+                "note": "Just a list of found URLs — already in our results table; not currently generated.",
+            },
+        ],
         # Pinned by image digest (see maigret_plugin.IMAGE) at Maigret v0.6.3.
         # Bumping the digest must also bump this constant. Checked via PyPI,
         # not Docker Hub: soxoj/maigret's Docker tags are git-commit SHAs
@@ -154,6 +229,16 @@ TOOL_FAMILIES = {
                 ),
             },
         ],
+        "native_reports": [
+            {
+                "format": "csv", "label": "CSV", "kind": "info", "available": True,
+                "note": (
+                    "Same data as our own CSV export below — including the recovery-email/"
+                    "phone hints and extracted profile fields (full name, creation date) "
+                    "that Holehe's raw CSV carries, which we merge into each finding's evidence."
+                ),
+            },
+        ],
         "version_check": {"method": "pypi", "package": "holehe", "pinned_version": "1.61"},
     },
     "ignorant": {
@@ -173,6 +258,7 @@ TOOL_FAMILIES = {
                 "description": "Per-site HTTP timeout in seconds.",
             },
         ],
+        "native_reports": [],  # no native CLI at all — we drive the library directly
         "version_check": {"method": "pypi", "package": "ignorant", "pinned_version": "1.2"},
     },
     "crtsh": {
@@ -186,6 +272,13 @@ TOOL_FAMILIES = {
             "crtsh": {"variant_label": "Default", "speed": "~5s*", "fast": True},
         },
         "options": [],
+        "native_reports": [
+            {
+                "format": "html", "label": "crt.sh search page", "kind": "link", "available": True,
+                "url_template": "https://crt.sh/?q={entity}",
+                "note": "crt.sh isn't a CLI — this is its own live, human-browsable search page.",
+            },
+        ],
         "version_check": {"method": "none"},
     },
     "theharvester": {
@@ -221,6 +314,20 @@ TOOL_FAMILIES = {
                     "Actively resolve hosts found by the passive sources above that don't "
                     "already come with a resolved address."
                 ),
+            },
+        ],
+        "native_reports": [
+            {
+                "format": "json", "label": "JSON", "kind": "info", "available": False,
+                "note": (
+                    "Same information already in our own JSON export below, which additionally "
+                    "groups multiple DNS records per host instead of listing them as separate rows."
+                ),
+            },
+            {
+                "format": "xml", "label": "XML", "kind": "download", "available": True,
+                "mime": "application/xml",
+                "note": "theHarvester always writes this alongside its JSON — no extra flags needed.",
             },
         ],
         # Pinned by git tag in docker/theharvester/Dockerfile (--branch 4.11.1).

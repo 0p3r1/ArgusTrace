@@ -94,6 +94,25 @@ export default function ToolInfoPage() {
         </section>
       )}
 
+      {family.native_reports.length > 0 && (
+        <section className="tool-info-section">
+          <h3>Native reports</h3>
+          <ul className="native-report-list">
+            {family.native_reports.map((r) => (
+              <li key={r.format}>
+                <div className="native-report-head">
+                  <span className={`native-report-status ${r.available ? 'available' : 'unavailable'}`}>
+                    {r.available ? 'Available' : 'Not generated'}
+                  </span>
+                  <strong>{r.label}</strong>
+                </div>
+                <p className="option-description">{r.note}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {family.examples.length > 0 && (
         <section className="tool-info-section">
           <h3>Example entities</h3>

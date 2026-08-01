@@ -1,5 +1,7 @@
+import pytest
+
 from argustrace.core.models import Status
-from argustrace.plugins.theharvester_plugin import TheHarvesterPlugin
+from argustrace.plugins.theharvester_plugin import TheHarvesterPlugin, generate_report
 
 
 async def test_invalid_entity_returns_error_without_touching_docker():
@@ -9,6 +11,16 @@ async def test_invalid_entity_returns_error_without_touching_docker():
     assert len(findings) == 1
     assert findings[0].status == Status.ERROR
     assert "invalid entity" in findings[0].evidence["reason"]
+
+
+async def test_generate_report_rejects_invalid_entity_without_touching_docker():
+    with pytest.raises(ValueError, match="invalid entity"):
+        await generate_report("not a domain!", "xml")
+
+
+async def test_generate_report_rejects_unsupported_format_without_touching_docker():
+    with pytest.raises(ValueError, match="unsupported report format"):
+        await generate_report("example.com", "json")
 
 
 def test_empty_report_is_not_found():

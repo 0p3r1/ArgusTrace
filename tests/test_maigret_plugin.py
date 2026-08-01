@@ -1,8 +1,10 @@
 import csv
 from pathlib import Path
 
+import pytest
+
 from argustrace.core.models import Status
-from argustrace.plugins.maigret_plugin import MaigretPlugin
+from argustrace.plugins.maigret_plugin import MaigretPlugin, generate_report
 
 
 async def test_invalid_entity_returns_error_without_touching_docker():
@@ -99,6 +101,16 @@ def test_build_args_exclude_tags():
     plugin = MaigretPlugin()
     args = plugin._build_args("alice", {"exclude_tags": "adult,dating"})
     assert args[args.index("--exclude-tags") + 1] == "adult,dating"
+
+
+async def test_generate_report_rejects_invalid_entity_without_touching_docker():
+    with pytest.raises(ValueError, match="invalid entity"):
+        await generate_report("not a valid username!", "html")
+
+
+async def test_generate_report_rejects_unsupported_format_without_touching_docker():
+    with pytest.raises(ValueError, match="unsupported report format"):
+        await generate_report("alice", "pdf")
 
 
 def test_build_args_ignores_blank_exclude_tags():

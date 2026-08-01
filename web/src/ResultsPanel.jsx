@@ -129,18 +129,22 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
           <div className="results-modal-head-actions">
             {findings && findings.length > 0 && (
               <>
-                <button type="button" className="action-button" onClick={() => downloadFindings(findings, filenameBase, 'csv')}>
-                  Export CSV
-                </button>
-                <button type="button" className="icon-button" onClick={() => previewOwnExport('csv')} aria-label="Preview CSV export" title="Preview CSV export">
-                  <EyeIcon />
-                </button>
-                <button type="button" className="action-button" onClick={() => downloadFindings(findings, filenameBase, 'json')}>
-                  Export JSON
-                </button>
-                <button type="button" className="icon-button" onClick={() => previewOwnExport('json')} aria-label="Preview JSON export" title="Preview JSON export">
-                  <EyeIcon />
-                </button>
+                <span className="split-action">
+                  <button type="button" className="action-button" onClick={() => downloadFindings(findings, filenameBase, 'csv')}>
+                    Export CSV
+                  </button>
+                  <button type="button" className="icon-button" onClick={() => previewOwnExport('csv')} aria-label="Preview CSV export" title="Preview CSV export">
+                    <EyeIcon />
+                  </button>
+                </span>
+                <span className="split-action">
+                  <button type="button" className="action-button" onClick={() => downloadFindings(findings, filenameBase, 'json')}>
+                    Export JSON
+                  </button>
+                  <button type="button" className="icon-button" onClick={() => previewOwnExport('json')} aria-label="Preview JSON export" title="Preview JSON export">
+                    <EyeIcon />
+                  </button>
+                </span>
               </>
             )}
             <button type="button" className="drawer-close" onClick={onMinimize} aria-label="Minimize (keep in tray)">
@@ -157,7 +161,7 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
             <span className="results-native-reports-label">Native reports:</span>
             {nativeActions.map((r) =>
               r.kind === 'download' ? (
-                <span key={r.format} className="native-report-action">
+                <span key={r.format} className="split-action">
                   <a
                     className="action-button"
                     href={`${API_BASE}/api/tools/${family.family}/report?entity=${encodeURIComponent(entity)}&format=${r.format}`}

@@ -579,10 +579,28 @@
   margin-left: 4px;
 }
 
-.native-report-action {
+/* A main action (download/export) fused with its "preview" eye into one
+   visual pill, so it reads as "this eye previews that action" instead of
+   two unrelated buttons that happen to sit next to each other. */
+.split-action {
   display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  align-items: stretch;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.split-action .action-button,
+.split-action .icon-button {
+  border: none;
+  border-radius: 0;
+}
+
+.split-action .icon-button {
+  border-left: 1px solid var(--border);
+  height: auto;
+  width: auto;
+  padding: 0 10px;
 }
 
 .icon-button {

@@ -62,9 +62,9 @@ class MaigretPlugin:
                 return [self._error(entity, "maigret produced no CSV output")]
 
             json_path = Path(tmpdir) / f"report_{entity}_ndjson.json"
-            profiles = self._parse_profiles(json_path) if json_path.exists() else {}
+            site_extras = self._parse_site_extras(entity, json_path) if json_path.exists() else {}
 
-            return self._parse_csv(entity, csv_path, profiles)
+            return self._parse_csv(entity, csv_path, site_extras)
 
     def _build_args(self, entity: str, options: dict | None) -> list[str]:
         options = options or {}
@@ -110,8 +110,13 @@ class MaigretPlugin:
         args += ["-a"] if self.top_sites is None else ["--top-sites", str(self.top_sites)]
         return args
 
-    def _parse_profiles(self, json_path: Path) -> dict[str, dict]:
-        profiles = {}
+    def _parse_site_extras(self, entity: str, json_path: Path) -> dict[str, dict]:
+        # Maigret's ndjson report (Claimed sites only) carries two things our
+        # CSV-derived findings would otherwise miss entirely: extracted
+        # profile fields (status.ids — photo, full name, location, ...) and
+        # recursive-search discoveries (ids_usernames/ids_links — other
+        # accounts/handles found by following links off this claimed page).
+        extras = {}
         with json_path.open(encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -121,12 +126,35 @@ class MaigretPlugin:
                     entry = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+
+                site_extra = {}
+
                 ids = entry.get("status", {}).get("ids")
                 if ids:
-                    profiles[entry.get("sitename")] = ids
-        return profiles
+                    site_extra["profile"] = ids
 
-    def _parse_csv(self, entity: str, csv_path: Path, profiles: dict[str, dict]) -> list[Finding]:
+                # Drop the exact username we searched for — that's not a new
+                # discovery. A different casing IS worth keeping: it's the
+                # literal handle as used on that specific site.
+                other_usernames = {
+                    name: id_type
+                    for name, id_type in (entry.get("ids_usernames") or {}).items()
+                    if name != entity
+                }
+                links = entry.get("ids_links") or []
+                if other_usernames or links:
+                    related = {}
+                    if other_usernames:
+                        related["usernames"] = other_usernames
+                    if links:
+                        related["links"] = links
+                    site_extra["related_ids"] = related
+
+                if site_extra:
+                    extras[entry.get("sitename")] = site_extra
+        return extras
+
+    def _parse_csv(self, entity: str, csv_path: Path, site_extras: dict[str, dict]) -> list[Finding]:
         findings = []
         with csv_path.open(newline="", encoding="utf-8") as f:
             for row in csv.DictReader(f):
@@ -137,9 +165,7 @@ class MaigretPlugin:
                     "http_status": row["http_status"],
                     "error_reason": row["error_reason"],
                 }
-                profile = profiles.get(row["name"])
-                if profile:
-                    evidence["profile"] = profile
+                evidence.update(site_extras.get(row["name"], {}))
                 findings.append(
                     Finding(
                         entity=entity,

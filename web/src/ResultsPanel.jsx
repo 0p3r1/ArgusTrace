@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { API_BASE } from './api.js'
-import { downloadFindings } from './exportFindings.js'
-import { CloseIcon, MinimizeIcon } from './icons.jsx'
+import { downloadFindings, findingsContent } from './exportFindings.js'
+import { CloseIcon, EyeIcon, MinimizeIcon } from './icons.jsx'
+import PreviewModal from './PreviewModal.jsx'
 import StatusBadge from './StatusBadge.jsx'
 
 const STATUS_FILTERS = [
@@ -11,19 +13,36 @@ const STATUS_FILTERS = [
 
 const PROFILE_META_FIELDS = ['location', 'follower_count', 'company']
 
-function ProfileCell({ profile }) {
-  const label = profile.fullname || profile.name
-  const meta = PROFILE_META_FIELDS.filter((key) => profile[key]).map((key) => profile[key])
-  const details = Object.entries(profile)
-    .filter(([key]) => key !== 'image' && key !== '_extractor')
-    .map(([key, value]) => `${key}: ${value}`)
-    .join('\n')
+function relatedIdsText(relatedIds) {
+  if (!relatedIds) return ''
+  const lines = []
+  if (relatedIds.usernames) {
+    lines.push(...Object.entries(relatedIds.usernames).map(([name, type]) => `related ${type}: ${name}`))
+  }
+  if (relatedIds.links) {
+    lines.push(...relatedIds.links.map((link) => `related link: ${link}`))
+  }
+  return lines.join('\n')
+}
 
-  if (!label && meta.length === 0 && !profile.image) return <span className="muted">—</span>
+function ProfileCell({ profile, relatedIds }) {
+  const label = profile?.fullname || profile?.name
+  const meta = profile ? PROFILE_META_FIELDS.filter((key) => profile[key]).map((key) => profile[key]) : []
+  const profileDetails = profile
+    ? Object.entries(profile)
+      .filter(([key]) => key !== 'image' && key !== '_extractor')
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n')
+    : ''
+  const details = [profileDetails, relatedIdsText(relatedIds)].filter(Boolean).join('\n')
+
+  const relatedCount = (Object.keys(relatedIds?.usernames ?? {}).length) + (relatedIds?.links?.length ?? 0)
+
+  if (!label && meta.length === 0 && !profile?.image && !relatedCount) return <span className="muted">—</span>
 
   return (
     <div className="profile-cell" title={details}>
-      {profile.image && (
+      {profile?.image && (
         <img
           src={profile.image}
           alt=""
@@ -36,6 +55,7 @@ function ProfileCell({ profile }) {
       <div className="profile-text">
         {label && <span className="profile-name">{label}</span>}
         {meta.length > 0 && <span className="profile-meta">{meta.join(' · ')}</span>}
+        {relatedCount > 0 && <span className="profile-meta">+{relatedCount} related ID{relatedCount > 1 ? 's' : ''}</span>}
       </div>
     </div>
   )
@@ -67,9 +87,38 @@ function ResultsSummary({ findings, activeFilter, onToggleFilter }) {
 }
 
 export default function ResultsPanel({ family, entity, findings, error, statusFilter, onToggleStatusFilter, onMinimize, onClose }) {
-  const hasProfiles = findings?.some((f) => f.evidence?.profile) ?? false
+  const hasProfiles = findings?.some((f) => f.evidence?.profile || f.evidence?.related_ids) ?? false
   const filenameBase = `${family.family}_${entity}`.replace(/[^\w.-]+/g, '_')
   const nativeActions = family.native_reports.filter((r) => r.available && r.kind !== 'info')
+  const [preview, setPreview] = useState(null)
+
+  function previewOwnExport(format) {
+    setPreview({
+      title: `${family.label} — ${format.toUpperCase()} export`,
+      kind: 'text',
+      content: findingsContent(findings, format),
+      loading: false,
+      error: null,
+    })
+  }
+
+  async function previewNativeReport(r) {
+    setPreview({
+      title: `${family.label} — ${r.label}`,
+      kind: r.format === 'html' ? 'html' : 'text',
+      content: '',
+      loading: true,
+      error: null,
+    })
+    try {
+      const res = await fetch(`${API_BASE}/api/tools/${family.family}/report?entity=${encodeURIComponent(entity)}&format=${r.format}`)
+      if (!res.ok) throw new Error(`API returned ${res.status}`)
+      const text = await res.text()
+      setPreview((prev) => (prev ? { ...prev, content: text, loading: false } : prev))
+    } catch (err) {
+      setPreview((prev) => (prev ? { ...prev, loading: false, error: err.message } : prev))
+    }
+  }
 
   return (
     <>
@@ -83,8 +132,14 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
                 <button type="button" className="action-button" onClick={() => downloadFindings(findings, filenameBase, 'csv')}>
                   Export CSV
                 </button>
+                <button type="button" className="icon-button" onClick={() => previewOwnExport('csv')} aria-label="Preview CSV export" title="Preview CSV export">
+                  <EyeIcon />
+                </button>
                 <button type="button" className="action-button" onClick={() => downloadFindings(findings, filenameBase, 'json')}>
                   Export JSON
+                </button>
+                <button type="button" className="icon-button" onClick={() => previewOwnExport('json')} aria-label="Preview JSON export" title="Preview JSON export">
+                  <EyeIcon />
                 </button>
               </>
             )}
@@ -102,15 +157,25 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
             <span className="results-native-reports-label">Native reports:</span>
             {nativeActions.map((r) =>
               r.kind === 'download' ? (
-                <a
-                  key={r.format}
-                  className="action-button"
-                  href={`${API_BASE}/api/tools/${family.family}/report?entity=${encodeURIComponent(entity)}&format=${r.format}`}
-                  download
-                  title={r.note}
-                >
-                  {r.label}
-                </a>
+                <span key={r.format} className="native-report-action">
+                  <a
+                    className="action-button"
+                    href={`${API_BASE}/api/tools/${family.family}/report?entity=${encodeURIComponent(entity)}&format=${r.format}`}
+                    download
+                    title={r.note}
+                  >
+                    {r.label}
+                  </a>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    onClick={() => previewNativeReport(r)}
+                    aria-label={`Preview ${r.label}`}
+                    title={`Preview ${r.label}`}
+                  >
+                    <EyeIcon />
+                  </button>
+                </span>
               ) : (
                 <a
                   key={r.format}
@@ -163,7 +228,7 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
                             )}
                           </td>
                           {hasProfiles && (
-                            <td>{f.evidence?.profile ? <ProfileCell profile={f.evidence.profile} /> : <span className="muted">—</span>}</td>
+                            <td><ProfileCell profile={f.evidence?.profile} relatedIds={f.evidence?.related_ids} /></td>
                           )}
                         </tr>
                       ))}
@@ -174,6 +239,17 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
           )}
         </div>
       </section>
+
+      {preview && (
+        <PreviewModal
+          title={preview.title}
+          kind={preview.kind}
+          content={preview.content}
+          loading={preview.loading}
+          error={preview.error}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </>
   )
 }

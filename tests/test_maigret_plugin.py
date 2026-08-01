@@ -46,15 +46,30 @@ def test_parse_csv_merges_extracted_profile_for_matching_site(tmp_path: Path):
         writer.writerow(["alice", "Spotify", "https://open.spotify.com/", "https://open.spotify.com/user/alice", "Available", "404", ""])
 
     plugin = MaigretPlugin()
-    profiles = {"GitHub": {"fullname": "Alice", "image": "https://example.com/a.jpg"}}
-    findings = plugin._parse_csv("alice", csv_path, profiles)
+    profile = {"fullname": "Alice", "image": "https://example.com/a.jpg"}
+    site_extras = {"GitHub": {"profile": profile}}
+    findings = plugin._parse_csv("alice", csv_path, site_extras)
 
     by_source = {f.source: f for f in findings}
-    assert by_source["maigret:GitHub"].evidence["profile"] == profiles["GitHub"]
+    assert by_source["maigret:GitHub"].evidence["profile"] == profile
     assert "profile" not in by_source["maigret:Spotify"].evidence
 
 
-def test_parse_profiles_reads_ndjson_and_keeps_only_nonempty_ids(tmp_path: Path):
+def test_parse_csv_merges_related_ids_for_matching_site(tmp_path: Path):
+    csv_path = tmp_path / "report_alice.csv"
+    with csv_path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["username", "name", "url_main", "url_user", "exists", "http_status", "error_reason"])
+        writer.writerow(["alice", "Wikipedia", "https://wikipedia.org/", "https://wikipedia.org/wiki/Alice", "Claimed", "200", ""])
+
+    plugin = MaigretPlugin()
+    related = {"usernames": {"Alicia": "username"}, "links": ["https://example.com/alicia"]}
+    findings = plugin._parse_csv("alice", csv_path, {"Wikipedia": {"related_ids": related}})
+
+    assert findings[0].evidence["related_ids"] == related
+
+
+def test_parse_site_extras_reads_ndjson_and_keeps_only_nonempty_ids(tmp_path: Path):
     json_path = tmp_path / "report_alice_ndjson.json"
     json_path.write_text(
         '{"sitename": "GitHub", "status": {"ids": {"fullname": "Alice"}}}\n'
@@ -62,9 +77,25 @@ def test_parse_profiles_reads_ndjson_and_keeps_only_nonempty_ids(tmp_path: Path)
     )
 
     plugin = MaigretPlugin()
-    profiles = plugin._parse_profiles(json_path)
+    extras = plugin._parse_site_extras("alice", json_path)
 
-    assert profiles == {"GitHub": {"fullname": "Alice"}}
+    assert extras == {"GitHub": {"profile": {"fullname": "Alice"}}}
+
+
+def test_parse_site_extras_drops_exact_self_match_but_keeps_other_casing(tmp_path: Path):
+    json_path = tmp_path / "report_alice_ndjson.json"
+    json_path.write_text(
+        '{"sitename": "SelfOnly", "status": {"ids": {}}, "ids_usernames": {"alice": "username"}, "ids_links": []}\n'
+        '{"sitename": "DifferentCase", "status": {"ids": {}}, "ids_usernames": {"Alice": "username"}, "ids_links": []}\n'
+        '{"sitename": "WithLinks", "status": {"ids": {}}, "ids_usernames": {}, "ids_links": ["https://example.com/alice2"]}\n'
+    )
+
+    plugin = MaigretPlugin()
+    extras = plugin._parse_site_extras("alice", json_path)
+
+    assert "SelfOnly" not in extras
+    assert extras["DifferentCase"]["related_ids"]["usernames"] == {"Alice": "username"}
+    assert extras["WithLinks"]["related_ids"]["links"] == ["https://example.com/alice2"]
 
 
 def test_build_args_defaults():

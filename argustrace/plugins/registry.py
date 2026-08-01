@@ -2,8 +2,10 @@ from argustrace.plugins import maigret_plugin, theharvester_plugin
 from argustrace.plugins.crtsh_plugin import CrtShPlugin
 from argustrace.plugins.holehe_plugin import HolehePlugin
 from argustrace.plugins.ignorant_plugin import IgnorantPlugin
+from argustrace.plugins.ip_plugin import IPPlugin
 from argustrace.plugins.maigret_plugin import MaigretPlugin
 from argustrace.plugins.mock_plugin import MockPlugin
+from argustrace.plugins.recherche_entreprises_plugin import RechercheEntreprisesPlugin
 from argustrace.plugins.sherlock_plugin import SherlockPlugin
 from argustrace.plugins.theharvester_plugin import BROAD_SOURCES, TheHarvesterPlugin
 
@@ -27,6 +29,8 @@ PLUGINS = {
     "crtsh": CrtShPlugin(),
     "theharvester": TheHarvesterPlugin(),                      # single free source
     "theharvester-broad": TheHarvesterPlugin(sources=BROAD_SOURCES),  # several free sources combined
+    "ip": IPPlugin(),
+    "recherche-entreprises": RechercheEntreprisesPlugin(),
 }
 
 # Human-facing metadata for the web UI, grouped by tool "family" so
@@ -332,5 +336,155 @@ TOOL_FAMILIES = {
         ],
         # Pinned by git tag in docker/theharvester/Dockerfile (--branch 4.11.1).
         "version_check": {"method": "github_releases", "repo": "laramies/theHarvester", "pinned_version": "4.11.1"},
+    },
+    "ip": {
+        "label": "IP Lookup",
+        "entity_type": "ip",
+        "description": "Network ownership (RDAP) and geolocation for a public IPv4/IPv6 address, no API key.",
+        "repo_url": None,
+        "docs_url": "https://rdap.org/",
+        "examples": [{"label": "Public DNS resolver", "entity": "8.8.8.8"}],
+        "variants": {
+            "ip": {"variant_label": "Default", "speed": "~2-5s", "fast": True},
+        },
+        "options": [
+            {
+                "name": "sources", "flag": "sources", "type": "enum_multi", "required": False,
+                "default": ["rdap", "geolocation"],
+                "choices": ["rdap", "geolocation"],
+                "description": (
+                    "Which sources to query: RDAP (network allocation/ownership, official "
+                    "registries) and/or geolocation (ip-api.com, approximate city-level)."
+                ),
+            },
+        ],
+        "native_reports": [],
+        "version_check": {"method": "none"},
+    },
+    "recherche-entreprises": {
+        "label": "Recherche d'entreprises",
+        "entity_type": "company",
+        "description": (
+            "Searches France's official open company registry — name, SIREN/SIRET, address, "
+            "legal status, officers — via the api.gouv.fr open data API, no API key."
+        ),
+        "repo_url": "https://github.com/annuaire-entreprises-data-gouv-fr/search-api",
+        "docs_url": "https://recherche-entreprises.api.gouv.fr/docs",
+        "examples": [
+            {"label": "Well-known French retailer", "entity": "carrefour"},
+            {"label": "Direct SIREN lookup", "entity": "652014051"},
+        ],
+        "variants": {
+            "recherche-entreprises": {"variant_label": "Default", "speed": "~2s", "fast": True},
+        },
+        "options": [
+            {
+                "name": "nom_personne", "flag": "nom_personne", "type": "str", "required": False, "default": None,
+                "description": (
+                    "Last name of a director/officer or elected official — finds companies "
+                    "linked to that person. Can be used with the entity field left blank."
+                ),
+            },
+            {
+                "name": "prenoms_personne", "flag": "prenoms_personne", "type": "str", "required": False, "default": None,
+                "description": "First name(s) of a director/officer or elected official, refines nom_personne.",
+            },
+            {
+                "name": "type_personne", "flag": "type_personne", "type": "enum", "required": False, "default": None,
+                "choices": ["dirigeant", "elu"],
+                "description": "Restrict the person search above to company officers or elected officials.",
+            },
+            {
+                "name": "date_naissance_personne_min", "flag": "date_naissance_personne_min", "type": "str",
+                "required": False, "default": None,
+                "description": "Earliest birth date (YYYY-MM-DD) for the person search above.",
+            },
+            {
+                "name": "date_naissance_personne_max", "flag": "date_naissance_personne_max", "type": "str",
+                "required": False, "default": None,
+                "description": "Latest birth date (YYYY-MM-DD) for the person search above.",
+            },
+            {
+                "name": "code_postal", "flag": "code_postal", "type": "str", "required": False, "default": None,
+                "description": (
+                    "5-digit postal code, comma-separated for several. Matches any of the "
+                    "company's establishments, not just its headquarters — the address shown "
+                    "in results is always the headquarters, which can be a different location."
+                ),
+            },
+            {
+                "name": "code_commune", "flag": "code_commune", "type": "str", "required": False, "default": None,
+                "description": "5-character INSEE commune code. Same establishment-level scope as code_postal.",
+            },
+            {
+                "name": "departement", "flag": "departement", "type": "str", "required": False, "default": None,
+                "description": "French department code (2-3 digits), e.g. \"75\" for Paris.",
+            },
+            {
+                "name": "region", "flag": "region", "type": "str", "required": False, "default": None,
+                "description": "2-digit INSEE region code.",
+            },
+            {
+                "name": "etat_administratif", "flag": "etat_administratif", "type": "enum", "required": False,
+                "default": None,
+                "choices": ["A", "C"],
+                "description": "Filter to Active (A) or Cessée/closed (C) companies. Omit for both.",
+            },
+            {
+                "name": "categorie_entreprise", "flag": "categorie_entreprise", "type": "enum", "required": False,
+                "default": None,
+                "choices": ["PME", "ETI", "GE"],
+                "description": "Company size category: small/medium (PME), mid-size (ETI), or large (GE).",
+            },
+            {
+                "name": "nature_juridique", "flag": "nature_juridique", "type": "str", "required": False, "default": None,
+                "description": (
+                    "INSEE legal-form code (e.g. \"5710\" for a SAS), comma-separated for "
+                    "several — see the docs link above for the full list."
+                ),
+            },
+            {
+                "name": "activite_principale", "flag": "activite_principale", "type": "str", "required": False,
+                "default": None,
+                "description": "NAF/APE activity code (e.g. \"62.01Z\"), comma-separated for several.",
+            },
+            {
+                "name": "section_activite_principale", "flag": "section_activite_principale", "type": "str",
+                "required": False, "default": None,
+                "description": "Broad activity sector, a single letter A-U (e.g. \"J\" for information/communication).",
+            },
+            {
+                "name": "tranche_effectif_salarie", "flag": "tranche_effectif_salarie", "type": "str",
+                "required": False, "default": None,
+                "description": "INSEE employee-count bracket code, comma-separated for several.",
+            },
+            {
+                "name": "ca_min", "flag": "ca_min", "type": "int", "required": False, "default": None,
+                "description": "Minimum annual revenue (euros).",
+            },
+            {
+                "name": "ca_max", "flag": "ca_max", "type": "int", "required": False, "default": None,
+                "description": "Maximum annual revenue (euros).",
+            },
+            {
+                "name": "resultat_net_min", "flag": "resultat_net_min", "type": "int", "required": False, "default": None,
+                "description": "Minimum net income (euros).",
+            },
+            {
+                "name": "resultat_net_max", "flag": "resultat_net_max", "type": "int", "required": False, "default": None,
+                "description": "Maximum net income (euros).",
+            },
+            {
+                "name": "sort_by_size", "flag": "sort_by_size", "type": "bool", "required": False, "default": False,
+                "description": "Sort results by company size (number of establishments) instead of relevance.",
+            },
+            {
+                "name": "per_page", "flag": "per_page", "type": "int", "required": False,
+                "default": 10, "min": 1, "max": 25,
+                "description": "Results per page (the API's own hard cap is 25).",
+            },
+        ],
+        "native_reports": [],
+        "version_check": {"method": "none"},
     },
 }

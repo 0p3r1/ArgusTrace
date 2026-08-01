@@ -13,6 +13,71 @@ const STATUS_FILTERS = [
 
 const PROFILE_META_FIELDS = ['location', 'follower_count', 'company']
 
+// Diagnostic fields already implied by the status badge/URL column — never
+// worth a "Details" cell on their own. profile/related_ids/coordinates get
+// their own rendering below; every other evidence key falls back to a
+// generic key:value summary so no plugin's data is ever silently invisible.
+const DIAGNOSTIC_KEYS = new Set(['reason', 'http_status', 'error_reason', 'rate_limited'])
+const SPECIALLY_RENDERED_KEYS = new Set(['profile', 'related_ids', 'coordinates'])
+
+function hasMeaningfulEvidence(evidence) {
+  if (!evidence) return false
+  return Object.entries(evidence).some(([key, value]) => !DIAGNOSTIC_KEYS.has(key) && !isEmptyValue(value))
+}
+
+function isEmptyValue(value) {
+  return value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
+}
+
+function formatEvidenceValue(value) {
+  if (Array.isArray(value)) {
+    if (typeof value[0] === 'object' && value[0] !== null) {
+      return value.map((item) => {
+        if (item.nom || item.prenoms) return [item.prenoms, item.nom].filter(Boolean).join(' ') + (item.qualite ? ` (${item.qualite})` : '')
+        if (item.denomination) return item.denomination + (item.qualite ? ` (${item.qualite})` : '')
+        return JSON.stringify(item)
+      }).join(', ')
+    }
+    return value.join(', ')
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.entries(value).map(([k, v]) => `${k}: ${v}`).join(', ')
+  }
+  return String(value)
+}
+
+function DetailsCell({ evidence }) {
+  if (evidence?.profile || evidence?.related_ids) {
+    return <ProfileCell profile={evidence.profile} relatedIds={evidence.related_ids} />
+  }
+
+  const entries = evidence
+    ? Object.entries(evidence).filter(([key, value]) => !DIAGNOSTIC_KEYS.has(key) && !SPECIALLY_RENDERED_KEYS.has(key) && !isEmptyValue(value))
+    : []
+  const coords = typeof evidence?.coordinates === 'string' ? evidence.coordinates.split(',') : null
+
+  if (entries.length === 0 && !coords) return <span className="muted">—</span>
+
+  const summary = entries.slice(0, 3).map(([, value]) => formatEvidenceValue(value)).join(' · ')
+  const full = entries.map(([key, value]) => `${key}: ${formatEvidenceValue(value)}`).join('\n')
+
+  return (
+    <div className="details-cell" title={full}>
+      {summary && <span className="details-summary">{summary}</span>}
+      {coords && (
+        <a
+          href={`https://www.openstreetmap.org/?mlat=${coords[0]}&mlon=${coords[1]}#map=11/${coords[0]}/${coords[1]}`}
+          target="_blank"
+          rel="noreferrer"
+          className="details-map-link"
+        >
+          Map ↗
+        </a>
+      )}
+    </div>
+  )
+}
+
 function relatedIdsText(relatedIds) {
   if (!relatedIds) return ''
   const lines = []
@@ -87,7 +152,7 @@ function ResultsSummary({ findings, activeFilter, onToggleFilter }) {
 }
 
 export default function ResultsPanel({ family, entity, findings, error, statusFilter, onToggleStatusFilter, onMinimize, onClose }) {
-  const hasProfiles = findings?.some((f) => f.evidence?.profile || f.evidence?.related_ids) ?? false
+  const hasDetails = findings?.some((f) => hasMeaningfulEvidence(f.evidence)) ?? false
   const filenameBase = `${family.family}_${entity}`.replace(/[^\w.-]+/g, '_')
   const nativeActions = family.native_reports.filter((r) => r.available && r.kind !== 'info')
   const [preview, setPreview] = useState(null)
@@ -212,7 +277,7 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
                       <th>Source</th>
                       <th>Status</th>
                       <th>URL</th>
-                      {hasProfiles && <th>Profile</th>}
+                      {hasDetails && <th>Details</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -231,8 +296,8 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
                               <span className="muted">—</span>
                             )}
                           </td>
-                          {hasProfiles && (
-                            <td><ProfileCell profile={f.evidence?.profile} relatedIds={f.evidence?.related_ids} /></td>
+                          {hasDetails && (
+                            <td><DetailsCell evidence={f.evidence} /></td>
                           )}
                         </tr>
                       ))}

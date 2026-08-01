@@ -6,7 +6,7 @@ from urllib.parse import quote
 from argustrace.core.models import Finding, Status
 from argustrace.plugins._docker_runner import run_hardened
 
-IMAGE = "argustrace-crtsh:1.0"
+IMAGE = "argustrace-curl:1.0"  # generic curl image, shared with other simple HTTP-API plugins
 ENTITY_PATTERN = re.compile(r"^(?=.{1,253}$)([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$")
 RUN_TIMEOUT_S = 35
 

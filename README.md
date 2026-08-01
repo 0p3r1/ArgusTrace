@@ -75,7 +75,9 @@ argustrace/
 │   ├── holehe_plugin.py    # runs Holehe in a hardened Docker container
 │   ├── ignorant_plugin.py  # runs Ignorant in a hardened Docker container
 │   ├── crtsh_plugin.py     # queries crt.sh (Certificate Transparency) in a container
-│   └── theharvester_plugin.py  # runs theHarvester in a hardened Docker container
+│   ├── theharvester_plugin.py  # runs theHarvester in a hardened Docker container
+│   ├── ip_plugin.py        # RDAP + ip-api.com geolocation, in a container
+│   └── recherche_entreprises_plugin.py  # France's open company registry, in a container
 ├── versioning.py         # on-demand PyPI/Docker Hub/GitHub release checks
 ├── cli.py                # `investigate` and `options` commands
 └── api.py                # FastAPI app: /api/plugins, /api/investigate,
@@ -87,8 +89,9 @@ docker/
 ├── ignorant/
 │   ├── Dockerfile        # builds argustrace-ignorant (no official image exists)
 │   └── ignorant_json.py  # thin wrapper: calls ignorant's library directly, prints JSON
-├── crtsh/
-│   └── Dockerfile        # minimal alpine+curl image, just fetches crt.sh's JSON API
+├── curl/
+│   └── Dockerfile        # minimal alpine+curl image, generic — shared by every plugin
+│                          # that just needs to fetch a JSON API (crt.sh, IP, French companies)
 └── theharvester/
     └── Dockerfile        # clones the official repo at a pinned tag, CLI entrypoint
 
@@ -108,13 +111,15 @@ Docker Desktop (or another Docker engine) must be running for every
 plugin except `mock`.
 
 Sherlock and Maigret are pulled straight from pinned registry images.
-Holehe, Ignorant, crt.sh, and theHarvester have no official image, so
-each must be built locally once:
+Holehe, Ignorant, theHarvester, and the generic curl image (used by
+crt.sh, IP Lookup, and Recherche d'entreprises — none of them need
+anything beyond "fetch a JSON URL") have no official image, so each
+must be built locally once:
 
 ```bash
 docker build -t argustrace-holehe:1.61 -f docker/holehe/Dockerfile .
 docker build -t argustrace-ignorant:1.2 -f docker/ignorant/Dockerfile .
-docker build -t argustrace-crtsh:1.0 -f docker/crtsh/Dockerfile .
+docker build -t argustrace-curl:1.0 -f docker/curl/Dockerfile .
 docker build -t argustrace-theharvester:4.11.1 -f docker/theharvester/Dockerfile .
 ```
 
@@ -147,6 +152,8 @@ growing, and prose doesn't scale past a handful of entries.
 | crt.sh              | domain   | `crtsh`               | ~5s*          | Certificate Transparency logs  |
 | theHarvester        | domain   | `theharvester`        | ~10s          | 1 free passive-recon source    |
 | theHarvester (broad) | domain   | `theharvester-broad`  | ~30-60s       | 4 free sources combined        |
+| IP Lookup           | ip       | `ip`                  | ~2-5s         | RDAP + geolocation, no API key |
+| Recherche d'entreprises | company | `recherche-entreprises` | ~2s      | France's open company registry |
 
 Output is a JSON array of `Finding` objects. Run
 `uv run python -m argustrace.cli options` with no argument for this same
@@ -178,7 +185,7 @@ Requests block until the plugin finishes (same as the CLI; no background
 job queue yet, so `sherlock-full` will hold the request open for 1-3
 minutes). FastAPI's interactive docs are at `http://127.0.0.1:8000/docs`.
 
-Built to stay usable well past today's 7 tools:
+Built to stay usable well past today's 8 tools:
 
 - **Catalog** (`ToolBrowser.jsx`): a wide card grid, text search over
   name/description, entity-type filter tags (colored by a fixed hue per
@@ -197,7 +204,11 @@ Built to stay usable well past today's 7 tools:
   it as a small chip at the bottom of the screen instead of losing it, so
   you can start another investigation while a previous one stays reachable
   — several can be minimized at once; "×" on a chip discards it for good.
-  Findings can be exported as CSV or JSON at any time.
+  Findings can be exported as CSV or JSON at any time. A finding's evidence
+  beyond the diagnostic basics (source/status/URL) shows in a generic
+  "Details" column — a coordinates field anywhere becomes a clickable map
+  link — so a new plugin's data is visible by default, not just the
+  fields a column happens to have been hand-built for.
 - **Native reports** (`registry.py`'s `native_reports`, `PreviewModal.jsx`):
   several tools can natively produce their own report (Maigret's HTML,
   theHarvester's XML, ...) beyond what we parse into `Finding`s. Each
@@ -450,6 +461,69 @@ results land in the JSON report as `{url: [{fingerprint: service}, ...]}`,
 a shape our generic `name:target`-string parser would mis-handle, and the
 check itself actively probes the target's own infrastructure over HTTP —
 both were confirmed by reading theHarvester's source, not assumed.
+
+## The IP plugin
+
+Two independent, zero-authentication sources, both run through the same
+generic curl image as crt.sh — no API keys, no signup:
+
+- **RDAP** (`rdap.org`, redirecting to whichever RIR — ARIN/RIPE/APNIC/
+  LACNIC/AFRINIC — actually holds the record): network allocation, org
+  name, and status. The redirect chain occasionally drops the TLS
+  connection mid-handshake (observed directly, not assumed) — a couple of
+  quick retries clears it, same rationale as crt.sh's flakiness handling.
+- **ip-api.com**: approximate city-level geolocation, ISP, and ASN.
+
+Private, loopback, link-local, and other non-routable addresses (RFC 1918,
+`::1`, etc.) are rejected up front with Python's `ipaddress` module
+(`is_global`) rather than sent to either source — there's no public OSINT
+data for an address that isn't actually routable on the internet, and both
+APIs would otherwise report that fact in their own inconsistent ways (RDAP
+returns a "reserved" record, ip-api.com returns `status: fail`). Both
+sources run independently per lookup, so one failing doesn't lose the
+other's result. Exposed option: `sources` (run RDAP, geolocation, or both).
+
+## The Recherche d'entreprises plugin
+
+Searches France's official, fully open company registry via
+[`recherche-entreprises.api.gouv.fr`](https://recherche-entreprises.api.gouv.fr/docs)
+([source](https://github.com/annuaire-entreprises-data-gouv-fr/search-api) —
+confirmed by fetching the file the API's own OpenAPI docs link into from
+that exact repo, not assumed) — genuinely zero authentication (verified
+directly; INSEE's own Sirene API requires a self-service token, this newer
+government API doesn't). Accepts a company name, SIREN, or SIRET as the
+entity (the API's own full-text search handles all three) and returns one
+`Finding` per matching company: SIREN, address, coordinates, legal form,
+activity code, size, VAT number, true certification/label flags, and —
+when the public record includes it — officers/directors (`dirigeants`).
+
+A result being present always means `FOUND`, regardless of whether the
+company is administratively active or closed (`etat_administratif`) —
+closed is a fact about a real record, not the same thing as "no match,"
+which is what `NOT_FOUND` (an empty `results` array) actually means.
+
+The entity field can be left blank if at least one filter below is set —
+verified directly against the API, e.g. `nom_personne` alone genuinely
+finds companies by a director's name with no name/SIREN typed in. Exposed
+options cover every meaningful search axis the API has: person
+(`nom_personne`, `prenoms_personne`, `type_personne`, birth-date range),
+location (`code_postal`, `code_commune`, `departement`, `region` — the
+postal/commune filters match *any* establishment, while the address shown
+in results is always the headquarters, which can be a different one),
+legal identity (`etat_administratif`, `categorie_entreprise`,
+`nature_juridique`, `activite_principale`, `section_activite_principale`,
+`tranche_effectif_salarie`), and financials (`ca_min`/`ca_max`,
+`resultat_net_min`/`resultat_net_max`), plus `sort_by_size` and `per_page`
+(the API's own hard cap is 25). The ~20 narrow certification/label filters
+(`est_bio`, `est_qualiopi`, `egapro_renseignee`, ...) are deliberately left
+out — a different search paradigm ("has label X") than what this tool is
+for — but any that are `true` for a result still show up in its own
+`labels` evidence.
+
+Belgium, Switzerland, and Germany were investigated too — Switzerland's
+Zefix needs free but self-registered API credentials (a new pattern this
+project hasn't taken on yet), and no equivalent zero-auth, real-time API
+was found for Belgium or Germany, so only France is covered for now.
 
 ## Testing
 

@@ -73,14 +73,16 @@ export default function RunDrawer({
             />
           )}
 
-          <label className="field-label" htmlFor="entity-input">Entity to investigate</label>
+          <label className="field-label" htmlFor="entity-input">
+            Entity to investigate
+            {family.entity_type === 'company' && <span className="field-label-hint"> (optional if a person/location filter is set below)</span>}
+          </label>
           <input
             id="entity-input"
             type="text"
-            placeholder="username, email, phone, or domain"
+            placeholder={family.examples[0]?.entity ?? family.entity_type}
             value={entity}
             onChange={(e) => onEntityChange(e.target.value)}
-            required
           />
 
           <button type="submit" className="submit-button" disabled={loading}>

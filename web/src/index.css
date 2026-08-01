@@ -46,11 +46,15 @@
      behind=orange, outdated=red), so reusing it for decoration would
      make a stripe look like a status signal. Blue → violet → pink → teal
      stays vivid and varied while keeping clear hue separation (~40°+
-     apart) from those semantic colors and from each other. */
+     apart) from those semantic colors and from each other. ip/company
+     were added later and had to fit in the one remaining gap (between
+     violet and pink) without reshuffling the original four. */
   --type-username: #8b5cf6;
   --type-email: #3b82f6;
   --type-phone: #ec4899;
   --type-domain: #14b8a6;
+  --type-ip: #bb4ceb;
+  --type-company: #eb4cdb;
   --type-any: #64748b;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;

@@ -3,12 +3,16 @@
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Managed with uv](https://img.shields.io/badge/managed%20with-uv-de5fe9)
 ![Tests: pytest](https://img.shields.io/badge/tests-pytest-0a9edc)
-![Status: skeleton](https://img.shields.io/badge/status-early--skeleton-yellow)
+![Status: active](https://img.shields.io/badge/status-active-brightgreen)
 ![License: TBD](https://img.shields.io/badge/license-TBD-lightgrey)
 
-A modular OSINT framework. This is an early-stage skeleton proving out the
-core pipeline — entity in, plugin runs, structured findings out — before any
-scheduler, correlation engine, scoring, graph, or REST API gets built on top.
+A modular OSINT framework. One shared plugin registry (`TOOL_FAMILIES`)
+drives both a CLI and a web app (FastAPI + React) against real OSINT tools,
+each run in a hardened, single-use Docker container. Every result is a
+**tri-state** `Finding` — `FOUND` / `NOT_FOUND` / `ERROR`, never a boolean,
+never a guess. Still deliberately out of scope: a scheduler, correlation
+engine, scoring, or graph — this stays focused on one thing, running a tool
+against an entity and getting back an honest, structured result.
 
 ## Architecture
 
@@ -73,8 +77,9 @@ argustrace/
 │   ├── crtsh_plugin.py     # queries crt.sh (Certificate Transparency) in a container
 │   └── theharvester_plugin.py  # runs theHarvester in a hardened Docker container
 ├── versioning.py         # on-demand PyPI/Docker Hub/GitHub release checks
-├── cli.py                # `investigate` command
-└── api.py                # FastAPI app: /api/plugins, /api/investigate, /api/tools/{family}/version-check
+├── cli.py                # `investigate` and `options` commands
+└── api.py                # FastAPI app: /api/plugins, /api/investigate,
+                           # /api/tools/{family}/version-check, /api/tools/{family}/report
 
 docker/
 ├── holehe/
@@ -121,25 +126,37 @@ cd web && npm install
 
 ## Usage
 
+Every plugin runs the same way — swap the entity and `--plugin` key:
+
 ```bash
-uv run python -m argustrace.cli investigate <entity> --plugin mock                  # no network, proves the pipeline
-uv run python -m argustrace.cli investigate <username> --plugin sherlock            # curated ~10-site list, a few seconds
-uv run python -m argustrace.cli investigate <username> --plugin sherlock-full       # full ~400+ site scan, 1-3 minutes
-uv run python -m argustrace.cli investigate <username> --plugin maigret             # top ~15 sites, a few seconds
-uv run python -m argustrace.cli investigate <username> --plugin maigret-full        # full ~3000+ site scan, several minutes
-uv run python -m argustrace.cli investigate <email> --plugin holehe                 # ~120 sites, ~10 seconds
-uv run python -m argustrace.cli investigate <phone> --plugin ignorant                # 3 sites, E164 format e.g. +33612345678
-uv run python -m argustrace.cli investigate <domain> --plugin crtsh                  # Certificate Transparency logs
-uv run python -m argustrace.cli investigate <domain> --plugin theharvester           # 1 free passive-recon source
-uv run python -m argustrace.cli investigate <domain> --plugin theharvester-broad     # 4 free sources combined
+uv run python -m argustrace.cli investigate <entity> --plugin <key>
 ```
 
-Output is a JSON array of `Finding` objects.
+A table, not a paragraph per tool, on purpose: this list is meant to keep
+growing, and prose doesn't scale past a handful of entries.
+
+| Tool             | Entity   | `--plugin` key      | Speed         | Notes                        |
+| ----------------- | -------- | -------------------- | ------------- | ----------------------------- |
+| Demo               | any      | `mock`               | instant       | no network, proves the pipeline |
+| Sherlock            | username | `sherlock`            | ~5s           | curated ~10-site list          |
+| Sherlock (full)     | username | `sherlock-full`       | 1-3 min       | ~400+ sites                    |
+| Maigret             | username | `maigret`             | ~6s           | top ~15 sites                  |
+| Maigret (full)      | username | `maigret-full`        | several min   | 3000+ sites                    |
+| Holehe              | email    | `holehe`              | ~10s          | ~120 sites                     |
+| Ignorant            | phone    | `ignorant`            | ~5s           | Amazon/Instagram/Snapchat, E164 format |
+| crt.sh              | domain   | `crtsh`               | ~5s*          | Certificate Transparency logs  |
+| theHarvester        | domain   | `theharvester`        | ~10s          | 1 free passive-recon source    |
+| theHarvester (broad) | domain   | `theharvester-broad`  | ~30-60s       | 4 free sources combined        |
+
+Output is a JSON array of `Finding` objects. Run
+`uv run python -m argustrace.cli options` with no argument for this same
+list from the CLI itself (it reads `TOOL_FAMILIES`, so it can't drift from
+the table above).
 
 Every option exposed in the web UI is also available from the CLI via
 repeatable `--option`/`-o name=value` flags — run
 `uv run python -m argustrace.cli options <plugin>` to see what's available
-for a given plugin, or with no argument to list every plugin/variant:
+for a given plugin:
 
 ```bash
 uv run python -m argustrace.cli options maigret
@@ -163,29 +180,40 @@ minutes). FastAPI's interactive docs are at `http://127.0.0.1:8000/docs`.
 
 Built to stay usable well past today's 7 tools:
 
-- **Search + filter tool browser** (`ToolBrowser.jsx`): a text search over
-  name/description, entity-type filter chips, and a "fast only" toggle,
-  rendering compact single-line rows instead of a card grid. No
-  virtualization or server-side search — verified to hold up fine at a
-  simulated ~200 rows with plain client-side filtering; the card grid's
-  actual scaling problem was per-card footprint, not row count.
-- **Advanced options** (`AdvancedOptionsPanel.jsx`): a form generated from
-  each family's `options` schema (int/str/bool/enum/enum_multi, each with
-  a description and a required/optional tag), collapsed by default. Only
-  real, safe CLI flags are exposed — nothing that only makes sense for a
-  format we don't use (`--html`, `--pdf`, ...) or that needs an API key we
-  don't provision.
-- **Fast badge**: a boolean `fast` per variant (kept alongside the
-  existing human-readable `speed` string) shown as a small ⚡ badge.
+- **Catalog** (`ToolBrowser.jsx`): a wide card grid, text search over
+  name/description, entity-type filter tags (colored by a fixed hue per
+  type — username/email/phone/domain — the only iconography in the UI, no
+  avatars or emoji), and a "has fast mode" toggle. A card shows a ⚡ fast
+  badge only when a family actually has a fast/slow tradeoff — most don't.
+- **Run drawer** (`RunDrawer.jsx`): clicking a card slides in a
+  configuration panel — a "Fast mode" toggle (the *only* variant selector;
+  turning it off reveals the advanced-options form, no separate dropdown),
+  the entity input, and submit. `AdvancedOptionsPanel.jsx` renders each
+  family's `options` schema generically (int/str/bool/enum/enum_multi).
+  Only real, safe CLI flags are exposed — nothing that needs an API key we
+  don't provision, and nothing whose output format we can't parse.
+- **Results** (`ResultsPanel.jsx` + `ResultsTray.jsx`): submitting closes
+  the drawer and opens a near-fullscreen results modal. "Minimize" parks
+  it as a small chip at the bottom of the screen instead of losing it, so
+  you can start another investigation while a previous one stays reachable
+  — several can be minimized at once; "×" on a chip discards it for good.
+  Findings can be exported as CSV or JSON at any time.
+- **Native reports** (`registry.py`'s `native_reports`, `PreviewModal.jsx`):
+  several tools can natively produce their own report (Maigret's HTML,
+  theHarvester's XML, ...) beyond what we parse into `Finding`s. Each
+  family declares exactly what's available and, when it isn't, why — see
+  "Native reports" below. Available ones get a download link *and* an
+  in-app preview (👁): HTML renders in a sandboxed iframe, everything else
+  as formatted text, without leaving the page.
 - **Version badges** (`VersionBadge.jsx`): green/orange/red/gray pill per
   tool, plus a "Check version" button. Checking is **on-demand, per tool**
   — there is no background refresh or scheduler; a server restart resets
   every badge to gray until re-checked by hand. See "Version checking"
   below.
 - **Tool info pages** (`/tools/:family`, via `react-router-dom`):
-  description, GitHub/docs links, variants, options, example entities,
-  and a "Use this tool" button that hands off to `/` with that family and
-  variant preselected via query params (`?family=...&variant=...`).
+  description, GitHub/docs links, variants, options, native report
+  capabilities, example entities, and a "Use this tool" button that hands
+  off to `/` with that family's run drawer already open.
 
 ## Version checking
 
@@ -215,6 +243,39 @@ be git-commit SHAs (not semver), discovered by checking the real Docker
 Hub API before wiring anything up — its version is checked via PyPI
 instead, where the project does publish clean semver releases.
 
+## Native reports
+
+Several underlying tools can produce their own report format on top of
+whatever we parse into `Finding`s — Maigret alone supports HTML, PDF,
+XMind, Markdown, TXT, a graph, and a Neo4j script. Rather than silently
+dropping that, each family in `TOOL_FAMILIES` declares a `native_reports`
+list — one entry per format, each one honest about whether it's actually
+wired up (`available: bool`) and why when it isn't:
+
+- **Maigret**: HTML implemented (a genuinely richer narrative report —
+  location/fullname/interests, per-site tags, archive.org links). PDF is
+  listed but unavailable — it needs Maigret's optional `pdf` extra, which
+  isn't installed in the pinned image; XMind/graph/Neo4j/Markdown/TXT are
+  listed unavailable too (niche viewers, or strictly less info than the
+  HTML report already gives).
+- **theHarvester**: XML implemented for free — `-f` always writes it
+  alongside the JSON we already parse, no extra flag needed.
+- **Sherlock**: XLSX is listed but unavailable. Verified directly against
+  the pinned image: Sherlock's `--xlsx` writes to a relative path outside
+  `--folderoutput` (a quirk in Sherlock itself), which the sandboxed,
+  read-only container can't retrieve.
+- **crt.sh**: not a CLI tool, so its "native" format is its own live
+  search page — exposed as a link, not a download.
+- Where a format's data is already fully reflected in our own CSV/JSON
+  export (e.g. every tool's raw CSV, Maigret's own JSON report), it's
+  listed as such rather than offered as a redundant second download.
+
+Generation is a separate, optional capability from the `Plugin` protocol —
+a module may export `generate_report(entity, format) -> bytes`; `run()`
+never changes. `GET /api/tools/{family}/report?entity=...&format=...`
+calls it **on demand only**: every request re-runs the tool fresh, nothing
+is cached or persisted.
+
 ## The Sherlock plugin
 
 [Sherlock](https://github.com/sherlock-project/sherlock) never runs on the
@@ -233,6 +294,9 @@ Sherlock's own per-site result is mapped onto our `Status`:
 | `Available`      | `NOT_FOUND`                                                  |
 | `Unknown`, `WAF` | `ERROR`                                                      |
 | `Illegal`        | dropped (username invalid for that site — no check happened) |
+
+Exposed options: `timeout`, and `nsfw` (also check NSFW sites, excluded
+from the default list).
 
 ## The Maigret plugin
 
@@ -253,6 +317,20 @@ uses `--csv` instead, giving the same three statuses as Sherlock:
 | `Claimed`       | `FOUND`                          |
 | `Available`     | `NOT_FOUND`                      |
 | `Unknown`       | `ERROR` (bot protection, blocked, connection error, etc.) |
+
+Maigret's JSON report is also the only place it exposes extracted profile
+data (photo, full name, location, follower counts, ...) and recursive-search
+discoveries (other usernames/links found via a claimed page) — both merged
+into each `FOUND` finding's `evidence` (`profile`, `related_ids`) by
+requesting `--json ndjson` alongside `--csv` in the same run and joining on
+site name. `related_ids` drops the exact username searched for (not a new
+discovery) but keeps different-casing handles, which are genuinely distinct
+per-site.
+
+Exposed options: `timeout`, `retries`, `tags`/`exclude_tags` (free text —
+the description embeds the most common tags from a real `--stats` run,
+since the web UI has no way to run it), and `enrich` (fetches secondary
+API endpoints for even more per-site profile data, slower).
 
 ## The Holehe plugin
 
@@ -279,6 +357,16 @@ The plugin deliberately never passes `--timeout` to Holehe: in v1.61,
 argparse stores an explicit value as a string instead of an int, which
 makes every single module raise immediately. Omitting the flag keeps the
 (int) default and avoids the bug entirely.
+
+Holehe's raw CSV also carries a recovery-email/phone hint and, for a few
+modules, an extracted full name or account-creation date (`others`, a
+Python-dict-repr string, read back with `ast.literal_eval`) — both were
+being silently dropped and are now merged into `evidence` as
+`recovery_hint`/`profile` when present.
+
+Exposed option: `no_password_recovery` (`-NP`) — skips the 4 modules
+(Adobe, Mail.ru, Odnoklassniki, Samsung) that trigger a real password-reset
+email on the target account, trading a little coverage for a quieter check.
 
 ## The Ignorant plugin
 
@@ -307,6 +395,10 @@ for a human to open and read themselves, and the "local" scanner only
 validates formatting/carrier, with no found/not-found signal at all.
 Forcing that into `FOUND`/`NOT_FOUND` would misrepresent what was actually
 verified, which is exactly what the tri-state `Status` exists to prevent.
+
+Exposed option: `timeout` — Ignorant has no CLI of its own to pass this to
+(see above), so it's our own wrapper's hardcoded `httpx` timeout, made
+configurable for consistency with every other plugin.
 
 ## The crt.sh plugin
 
@@ -348,6 +440,17 @@ Like crt.sh, this is a discovery tool rather than a per-candidate check:
 every host/IP/email theHarvester reports becomes a `FOUND` Finding; no
 results at all → `NOT_FOUND`; a failed run → `ERROR`.
 
+Exposed options: `limit`, `sources` (overrides the fast/broad presets
+above), and `dns_lookup` (`-n`, actively resolves hosts the passive sources
+found without a resolved address). `-c`/`--dns-brute` and `-t`/`--take-over`
+are deliberately **not** exposed: brute force means ~5000 DNS queries
+(minutes, not seconds, and arguably active rather than passive recon,
+which contradicts this tool's whole reason for being here); take-over
+results land in the JSON report as `{url: [{fingerprint: service}, ...]}`,
+a shape our generic `name:target`-string parser would mis-handle, and the
+check itself actively probes the target's own infrastructure over HTTP —
+both were confirmed by reading theHarvester's source, not assumed.
+
 ## Testing
 
 ```bash
@@ -356,9 +459,13 @@ uv run pytest -v
 
 Tests lock the `Status`/`Finding`/`Plugin` contracts using `MockPlugin`,
 the entity validation, option-composition (default/custom/clamped), and
-result-to-`Status` mapping logic of every real plugin, and the version
+result-to-`Status` mapping logic of every real plugin, the version
 classification rules in `test_versioning.py` (current/behind/outdated/
 unknown-on-error/pinned-not-found, with `httpx.MockTransport` standing in
-for PyPI/Docker Hub/GitHub) — none of it needs Docker or network access.
-Actually running these tools and their live version checks against real
-targets is exercised manually, not in the automated suite.
+for PyPI/Docker Hub/GitHub), the CLI's option parsing/coercion and error
+messages (`test_cli.py`, via `typer.testing.CliRunner`), and the native
+report endpoint's status codes (`test_api.py`, via FastAPI's `TestClient`,
+generators mocked) — none of it needs Docker or network access. Actually
+running these tools, their native report generation, and live version
+checks against real targets is exercised manually, not in the automated
+suite.

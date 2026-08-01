@@ -50,6 +50,16 @@ def test_parse_rdap_extracts_network_info_and_org_name():
     assert finding.evidence["network_name"] == "GOOGLE-IPV6"
     assert finding.evidence["organization"] == "Google LLC"
     assert finding.evidence["range"] == "2001:4860:: - 2001:4860:ffff::"
+    assert finding.evidence["headline"] == "Google LLC · US"
+
+
+def test_parse_rdap_headline_falls_back_to_network_name_without_org():
+    plugin = IPPlugin()
+    stdout = json.dumps({"name": "PRIVATE-ADDRESS-CBLK", "status": ["reserved"]})
+
+    finding = plugin._parse_rdap("192.0.2.1", stdout)
+
+    assert finding.evidence["headline"] == "PRIVATE-ADDRESS-CBLK"
 
 
 def test_parse_rdap_empty_body_is_not_found():
@@ -77,6 +87,7 @@ def test_parse_geolocation_success():
     assert finding.status == Status.FOUND
     assert finding.evidence["country"] == "Australia"
     assert finding.evidence["coordinates"] == "-27.4766,153.0166"
+    assert finding.evidence["headline"] == "South Brisbane, Queensland, Australia"
 
 
 def test_parse_geolocation_failure_is_error():

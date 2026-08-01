@@ -707,6 +707,123 @@
   color: var(--text);
 }
 
+/* ---- Finding detail modal ("fiche produit") ---- */
+
+.detail-modal {
+  position: fixed;
+  top: 6vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(90vw, 640px);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  z-index: 61;
+  overflow: hidden;
+  animation: drawer-fade-in 0.15s ease;
+}
+
+.detail-modal-head-text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.detail-modal-head-text h3 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.detail-modal-photo {
+  width: 88px;
+  height: 88px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: var(--surface-hover);
+}
+
+.detail-modal-headline {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-h);
+  margin: 0;
+}
+
+.detail-modal-url {
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.detail-field-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.detail-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.detail-field-row dt {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.detail-field-row dd {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-h);
+  word-break: break-word;
+}
+
+.detail-field-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.detail-field-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.detail-field-tag {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
 .results-modal-body {
   padding: 20px;
   overflow-y: auto;
@@ -863,7 +980,6 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  cursor: help;
 }
 
 .profile-avatar {
@@ -904,7 +1020,23 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  cursor: help;
+  min-height: 24px;
+}
+
+.details-cell-clickable {
+  cursor: pointer;
+  border-radius: 6px;
+  margin: -4px -8px;
+  padding: 4px 8px;
+}
+
+.details-cell-clickable:hover {
+  background: var(--surface-hover);
+}
+
+.details-cell-clickable:hover .details-cell-chevron {
+  opacity: 1;
+  transform: translateX(2px);
 }
 
 .details-summary {
@@ -921,6 +1053,13 @@
   font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+.details-cell-chevron {
+  color: var(--text-muted);
+  opacity: 0.5;
+  transition: opacity 0.15s, transform 0.15s;
+  margin-left: auto;
 }
 
 /* ---- Tool info page ---- */

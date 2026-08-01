@@ -55,6 +55,7 @@ def test_parse_report_splits_host_name_and_resolved_target():
     assert by_source["theharvester:hosts:api.example.com"].evidence["resolved"] == ["api.example.com.edgekey.net"]
     assert by_source["theharvester:hosts:www.example.com"].evidence["resolved"] == ["1.2.3.4"]
     assert by_source["theharvester:hosts:api.example.com"].url == "https://api.example.com"
+    assert by_source["theharvester:hosts:www.example.com"].evidence["headline"] == "1.2.3.4"
 
 
 def test_parse_report_merges_multiple_records_for_the_same_host():
@@ -79,6 +80,20 @@ def test_parse_report_ignores_cmd_key():
 
     assert len(findings) == 1
     assert findings[0].source == "theharvester:emails:contact@example.com"
+
+
+def test_parse_report_never_puts_none_in_resolved_or_headline():
+    # A bare "name" with no ":target" part (e.g. an email entry) used to
+    # append `target or None`, polluting evidence["resolved"] with a raw
+    # None that rendered as a leading ", " in the UI.
+    plugin = TheHarvesterPlugin()
+    data = {"cmd": "-d example.com -b rapiddns", "emails": ["contact@example.com"]}
+
+    findings = plugin._parse_report("example.com", data, "rapiddns")
+
+    assert findings[0].evidence["resolved"] == []
+    assert None not in findings[0].evidence["resolved"]
+    assert "headline" not in findings[0].evidence
 
 
 def test_build_args_defaults():

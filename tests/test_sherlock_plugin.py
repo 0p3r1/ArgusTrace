@@ -37,6 +37,17 @@ def test_parse_csv_maps_every_sherlock_status(tmp_path: Path):
     assert by_source["sherlock:Blocked"].status == Status.ERROR
 
 
+def test_round_response_time_shortens_long_floats():
+    plugin = SherlockPlugin()
+    assert plugin._round_response_time("1.1736262499999999") == "1.17"
+
+
+def test_round_response_time_passes_through_unparseable_values():
+    plugin = SherlockPlugin()
+    assert plugin._round_response_time("") == ""
+    assert plugin._round_response_time("n/a") == "n/a"
+
+
 def test_build_args_uses_default_timeout_when_no_options_given():
     plugin = SherlockPlugin(sites=["GitHub"])
     args = plugin._build_args("alice", None)

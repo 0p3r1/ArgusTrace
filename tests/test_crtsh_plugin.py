@@ -51,3 +51,20 @@ def test_parse_rows_dedupes_multi_san_certificates():
     names = {f.evidence["name"] for f in findings}
     assert names == {"*.example.com", "example.com", "api.example.com"}
     assert all(f.status == Status.FOUND for f in findings)
+    by_name = {f.evidence["name"]: f for f in findings}
+    assert by_name["example.com"].evidence["headline"] == "Let's Encrypt · issued 2026-01-01"
+
+
+def test_issuer_org_extracts_organization_from_a_raw_dn():
+    plugin = CrtShPlugin()
+    assert plugin._issuer_org("C=US, O=Let's Encrypt, CN=YR2") == "Let's Encrypt"
+
+
+def test_issuer_org_falls_back_to_raw_string_without_an_o_component():
+    plugin = CrtShPlugin()
+    assert plugin._issuer_org("Some Free CA") == "Some Free CA"
+
+
+def test_issuer_org_handles_missing_issuer():
+    plugin = CrtShPlugin()
+    assert plugin._issuer_org(None) is None

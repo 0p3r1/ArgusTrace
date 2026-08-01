@@ -128,11 +128,15 @@ class RechercheEntreprisesPlugin:
         if siege.get("latitude") and siege.get("longitude"):
             coordinates = f"{siege['latitude']},{siege['longitude']}"
 
+        nom_complet = r.get("nom_complet")
+        adresse = siege.get("adresse")
+
         evidence = {
             "siren": r.get("siren"),
-            "nom_complet": r.get("nom_complet"),
+            "nom_complet": nom_complet,
+            "headline": " · ".join(p for p in (nom_complet, adresse) if p) or None,
             "sigle": r.get("sigle"),
-            "adresse": siege.get("adresse"),
+            "adresse": adresse,
             "coordinates": coordinates,
             "activite_principale": r.get("activite_principale"),
             "categorie_entreprise": r.get("categorie_entreprise"),

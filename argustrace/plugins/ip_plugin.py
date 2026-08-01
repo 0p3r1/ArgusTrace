@@ -88,17 +88,22 @@ class IPPlugin:
         except json.JSONDecodeError:
             return self._error(entity, "RDAP returned a non-JSON response", source="rdap")
 
+        organization = self._extract_org_name(data.get("entities"))
+        network_name = data.get("name")
+        country = data.get("country")
+
         evidence = {
-            "network_name": data.get("name"),
+            "network_name": network_name,
             "handle": data.get("handle"),
             "range": (
                 f"{data['startAddress']} - {data['endAddress']}"
                 if data.get("startAddress") and data.get("endAddress") else None
             ),
             "status": data.get("status"),
-            "country": data.get("country"),
-            "organization": self._extract_org_name(data.get("entities")),
+            "country": country,
+            "organization": organization,
             "whois_server": data.get("port43"),
+            "headline": " · ".join(p for p in (organization or network_name, country) if p) or None,
         }
         evidence = {k: v for k, v in evidence.items() if v}
         return Finding(entity=entity, entity_type="ip", source="rdap", status=Status.FOUND, evidence=evidence)
@@ -129,14 +134,19 @@ class IPPlugin:
         if data.get("status") != "success":
             return self._error(entity, data.get("message", "geolocation lookup failed"), source="ip-api")
 
+        city = data.get("city")
+        region = data.get("regionName")
+        country = data.get("country")
+
         evidence = {
-            "country": data.get("country"),
-            "region": data.get("regionName"),
-            "city": data.get("city"),
+            "country": country,
+            "region": region,
+            "city": city,
             "isp": data.get("isp"),
             "org": data.get("org"),
             "as": data.get("as"),
             "coordinates": f"{data['lat']},{data['lon']}" if "lat" in data and "lon" in data else None,
+            "headline": ", ".join(p for p in (city, region, country) if p) or None,
         }
         evidence = {k: v for k, v in evidence.items() if v}
         return Finding(entity=entity, entity_type="ip", source="ip-api", status=Status.FOUND, evidence=evidence)

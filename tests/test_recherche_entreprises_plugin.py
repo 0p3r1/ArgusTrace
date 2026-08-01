@@ -77,6 +77,7 @@ def test_to_finding_maps_fields_and_is_always_found_regardless_of_etat():
     assert finding.url == "https://annuaire-entreprises.data.gouv.fr/entreprise/652014051"
     assert finding.evidence["etat_administratif"] == "C"
     assert finding.evidence["dirigeants"][0]["nom"] == "DUPONT"
+    assert finding.evidence["headline"] == "CARREFOUR · 93 AVENUE DE PARIS 91300 MASSY"
 
 
 def test_parse_response_builds_one_finding_per_result():

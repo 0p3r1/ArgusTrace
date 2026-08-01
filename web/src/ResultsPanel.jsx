@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { API_BASE } from './api.js'
 import { downloadFindings, findingsContent } from './exportFindings.js'
+import FindingDetailModal from './FindingDetailModal.jsx'
 import { CloseIcon, EyeIcon, MinimizeIcon } from './icons.jsx'
 import PreviewModal from './PreviewModal.jsx'
 import StatusBadge from './StatusBadge.jsx'
@@ -14,11 +15,12 @@ const STATUS_FILTERS = [
 const PROFILE_META_FIELDS = ['location', 'follower_count', 'company']
 
 // Diagnostic fields already implied by the status badge/URL column — never
-// worth a "Details" cell on their own. profile/related_ids/coordinates get
-// their own rendering below; every other evidence key falls back to a
-// generic key:value summary so no plugin's data is ever silently invisible.
+// worth a "Details" cell on their own. A curated evidence.headline (set by
+// the plugin, not guessed here) is the primary row summary; profile/
+// related_ids/coordinates get their own compact rendering. Everything else
+// is still visible, just one click away in FindingDetailModal instead of
+// crammed into a hover tooltip.
 const DIAGNOSTIC_KEYS = new Set(['reason', 'http_status', 'error_reason', 'rate_limited'])
-const SPECIALLY_RENDERED_KEYS = new Set(['profile', 'related_ids', 'coordinates'])
 
 function hasMeaningfulEvidence(evidence) {
   if (!evidence) return false
@@ -29,84 +31,13 @@ function isEmptyValue(value) {
   return value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
 }
 
-function formatEvidenceValue(value) {
-  if (Array.isArray(value)) {
-    if (typeof value[0] === 'object' && value[0] !== null) {
-      return value.map((item) => {
-        if (item.nom || item.prenoms) return [item.prenoms, item.nom].filter(Boolean).join(' ') + (item.qualite ? ` (${item.qualite})` : '')
-        if (item.denomination) return item.denomination + (item.qualite ? ` (${item.qualite})` : '')
-        return JSON.stringify(item)
-      }).join(', ')
-    }
-    return value.join(', ')
-  }
-  if (typeof value === 'object' && value !== null) {
-    return Object.entries(value).map(([k, v]) => `${k}: ${v}`).join(', ')
-  }
-  return String(value)
-}
-
-function DetailsCell({ evidence }) {
-  if (evidence?.profile || evidence?.related_ids) {
-    return <ProfileCell profile={evidence.profile} relatedIds={evidence.related_ids} />
-  }
-
-  const entries = evidence
-    ? Object.entries(evidence).filter(([key, value]) => !DIAGNOSTIC_KEYS.has(key) && !SPECIALLY_RENDERED_KEYS.has(key) && !isEmptyValue(value))
-    : []
-  const coords = typeof evidence?.coordinates === 'string' ? evidence.coordinates.split(',') : null
-
-  if (entries.length === 0 && !coords) return <span className="muted">—</span>
-
-  const summary = entries.slice(0, 3).map(([, value]) => formatEvidenceValue(value)).join(' · ')
-  const full = entries.map(([key, value]) => `${key}: ${formatEvidenceValue(value)}`).join('\n')
-
-  return (
-    <div className="details-cell" title={full}>
-      {summary && <span className="details-summary">{summary}</span>}
-      {coords && (
-        <a
-          href={`https://www.openstreetmap.org/?mlat=${coords[0]}&mlon=${coords[1]}#map=11/${coords[0]}/${coords[1]}`}
-          target="_blank"
-          rel="noreferrer"
-          className="details-map-link"
-        >
-          Map ↗
-        </a>
-      )}
-    </div>
-  )
-}
-
-function relatedIdsText(relatedIds) {
-  if (!relatedIds) return ''
-  const lines = []
-  if (relatedIds.usernames) {
-    lines.push(...Object.entries(relatedIds.usernames).map(([name, type]) => `related ${type}: ${name}`))
-  }
-  if (relatedIds.links) {
-    lines.push(...relatedIds.links.map((link) => `related link: ${link}`))
-  }
-  return lines.join('\n')
-}
-
-function ProfileCell({ profile, relatedIds }) {
+function ProfileSummary({ profile, relatedIds }) {
   const label = profile?.fullname || profile?.name
   const meta = profile ? PROFILE_META_FIELDS.filter((key) => profile[key]).map((key) => profile[key]) : []
-  const profileDetails = profile
-    ? Object.entries(profile)
-      .filter(([key]) => key !== 'image' && key !== '_extractor')
-      .map(([key, value]) => `${key}: ${value}`)
-      .join('\n')
-    : ''
-  const details = [profileDetails, relatedIdsText(relatedIds)].filter(Boolean).join('\n')
-
   const relatedCount = (Object.keys(relatedIds?.usernames ?? {}).length) + (relatedIds?.links?.length ?? 0)
 
-  if (!label && meta.length === 0 && !profile?.image && !relatedCount) return <span className="muted">—</span>
-
   return (
-    <div className="profile-cell" title={details}>
+    <div className="profile-cell">
       {profile?.image && (
         <img
           src={profile.image}
@@ -122,6 +53,42 @@ function ProfileCell({ profile, relatedIds }) {
         {meta.length > 0 && <span className="profile-meta">{meta.join(' · ')}</span>}
         {relatedCount > 0 && <span className="profile-meta">+{relatedCount} related ID{relatedCount > 1 ? 's' : ''}</span>}
       </div>
+    </div>
+  )
+}
+
+function DetailsCell({ finding, onOpenDetail }) {
+  const evidence = finding.evidence
+  const clickable = hasMeaningfulEvidence(evidence)
+  const coords = typeof evidence?.coordinates === 'string' ? evidence.coordinates.split(',') : null
+
+  let body
+  if (evidence?.profile || evidence?.related_ids) {
+    body = <ProfileSummary profile={evidence.profile} relatedIds={evidence.related_ids} />
+  } else if (evidence?.headline) {
+    body = <span className="details-summary">{evidence.headline}</span>
+  } else if (!clickable) {
+    body = <span className="muted">—</span>
+  }
+
+  return (
+    <div
+      className={`details-cell${clickable ? ' details-cell-clickable' : ''}`}
+      onClick={clickable ? () => onOpenDetail(finding) : undefined}
+    >
+      {body}
+      {coords && (
+        <a
+          href={`https://www.openstreetmap.org/?mlat=${coords[0]}&mlon=${coords[1]}#map=11/${coords[0]}/${coords[1]}`}
+          target="_blank"
+          rel="noreferrer"
+          className="details-map-link"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Map ↗
+        </a>
+      )}
+      {clickable && <span className="details-cell-chevron">›</span>}
     </div>
   )
 }
@@ -156,6 +123,7 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
   const filenameBase = `${family.family}_${entity}`.replace(/[^\w.-]+/g, '_')
   const nativeActions = family.native_reports.filter((r) => r.available && r.kind !== 'info')
   const [preview, setPreview] = useState(null)
+  const [detailFinding, setDetailFinding] = useState(null)
 
   function previewOwnExport(format) {
     setPreview({
@@ -297,7 +265,7 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
                             )}
                           </td>
                           {hasDetails && (
-                            <td><DetailsCell evidence={f.evidence} /></td>
+                            <td><DetailsCell finding={f} onOpenDetail={setDetailFinding} /></td>
                           )}
                         </tr>
                       ))}
@@ -318,6 +286,10 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
           error={preview.error}
           onClose={() => setPreview(null)}
         />
+      )}
+
+      {detailFinding && (
+        <FindingDetailModal finding={detailFinding} onClose={() => setDetailFinding(null)} />
       )}
     </>
   )

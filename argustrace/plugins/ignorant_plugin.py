@@ -61,6 +61,14 @@ class IgnorantPlugin:
             else:
                 status = Status.NOT_FOUND
 
+            evidence = {
+                "domain": row.get("domain"),
+                "method": row.get("method"),
+                "rate_limited": row["rateLimit"],
+            }
+            if row.get("domain") and row.get("method"):
+                evidence["headline"] = f"{row['domain']} · {row['method']}"
+
             findings.append(
                 Finding(
                     entity=entity,
@@ -68,11 +76,7 @@ class IgnorantPlugin:
                     source=f"ignorant:{row['name']}",
                     status=status,
                     url=f"https://{row['domain']}" if row.get("domain") else None,
-                    evidence={
-                        "domain": row.get("domain"),
-                        "method": row.get("method"),
-                        "rate_limited": row["rateLimit"],
-                    },
+                    evidence=evidence,
                 )
             )
         return findings

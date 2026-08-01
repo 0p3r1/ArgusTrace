@@ -96,10 +96,16 @@ class TheHarvesterPlugin:
                 continue
             for item in items:
                 name, _, target = item.partition(":")
-                grouped.setdefault((category, name), []).append(target or None)
+                if target:
+                    grouped.setdefault((category, name), []).append(target)
+                else:
+                    grouped.setdefault((category, name), [])
 
         findings = []
         for (category, name), resolved in grouped.items():
+            evidence = {"name": name, "resolved": resolved}
+            if resolved:
+                evidence["headline"] = ", ".join(resolved)
             findings.append(
                 Finding(
                     entity=entity,
@@ -107,7 +113,7 @@ class TheHarvesterPlugin:
                     source=f"theharvester:{category}:{name}",
                     status=Status.FOUND,
                     url=f"https://{name}" if category == "hosts" else None,
-                    evidence={"name": name, "resolved": resolved},
+                    evidence=evidence,
                 )
             )
 

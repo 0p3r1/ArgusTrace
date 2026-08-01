@@ -78,6 +78,10 @@ class HolehePlugin:
                 profile = self._parse_others(row.get("others"))
                 if profile:
                     evidence["profile"] = profile
+                    evidence["headline"] = profile.get("FullName") or profile.get("fullname")
+                elif row["domain"] and row["method"]:
+                    evidence["headline"] = f"{row['domain']} · {row['method']}"
+                evidence = {k: v for k, v in evidence.items() if v}
 
                 findings.append(
                     Finding(

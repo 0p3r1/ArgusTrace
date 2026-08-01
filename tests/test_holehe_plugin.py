@@ -39,6 +39,25 @@ def test_parse_csv_maps_ratelimit_and_exists_onto_status(tmp_path: Path):
     assert by_source["holehe:github"].status == Status.ERROR
     assert by_source["holehe:adobe"].status == Status.FOUND
     assert by_source["holehe:amazon"].status == Status.NOT_FOUND
+    assert by_source["holehe:adobe"].evidence["headline"] == "adobe.com · password recovery"
+
+
+def test_parse_csv_headline_prefers_extracted_fullname_over_domain_method(tmp_path: Path):
+    csv_path = tmp_path / "holehe_123_alice@example.com_results.csv"
+    fieldnames = ["name", "domain", "method", "frequent_rate_limit", "rateLimit", "exists", "emailrecovery", "phoneNumber", "others"]
+    with csv_path.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerow({
+            "name": "somesite", "domain": "somesite.com", "method": "register", "frequent_rate_limit": "False",
+            "rateLimit": "False", "exists": "True", "emailrecovery": "", "phoneNumber": "",
+            "others": "{'FullName': 'Alice Example'}",
+        })
+
+    plugin = HolehePlugin()
+    findings = plugin._parse_csv("alice@example.com", csv_path)
+
+    assert findings[0].evidence["headline"] == "Alice Example"
 
 
 def test_build_args_no_password_recovery_off_by_default():

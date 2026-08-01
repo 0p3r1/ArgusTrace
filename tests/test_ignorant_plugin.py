@@ -27,6 +27,7 @@ def test_parse_rows_maps_ratelimit_and_exists_onto_status():
     assert by_source["ignorant:instagram"].status == Status.FOUND
     # rateLimit=True takes priority over exists, regardless of its value.
     assert by_source["ignorant:snapchat"].status == Status.ERROR
+    assert by_source["ignorant:instagram"].evidence["headline"] == "instagram.com · other"
 
 
 def test_resolve_timeout_uses_default_when_absent():

@@ -71,6 +71,11 @@ class CrtShPlugin:
                 if not name or name in seen:
                     continue
                 seen.add(name)
+                issuer = row.get("issuer_name")
+                not_before = row.get("not_before")
+                org = self._issuer_org(issuer)
+                issued_on = not_before.split("T")[0] if not_before else None
+                headline = " · ".join(p for p in (org, f"issued {issued_on}" if issued_on else None) if p)
                 findings.append(
                     Finding(
                         entity=entity,
@@ -80,13 +85,23 @@ class CrtShPlugin:
                         url=f"https://crt.sh/?id={row['id']}",
                         evidence={
                             "name": name,
-                            "issuer": row.get("issuer_name"),
-                            "not_before": row.get("not_before"),
+                            "issuer": issuer,
+                            "not_before": not_before,
                             "not_after": row.get("not_after"),
+                            **({"headline": headline} if headline else {}),
                         },
                     )
                 )
         return findings
+
+    def _issuer_org(self, issuer_name: str | None) -> str | None:
+        # issuer_name is a raw certificate DN like "C=US, O=Let's Encrypt,
+        # CN=YR2" — the organization ("O=") is the human-readable part
+        # worth surfacing, the rest is noise for a quick summary.
+        if not issuer_name:
+            return None
+        match = re.search(r"O=([^,]+)", issuer_name)
+        return match.group(1).strip() if match else issuer_name
 
     def _error(self, entity: str, reason: str) -> Finding:
         return Finding(

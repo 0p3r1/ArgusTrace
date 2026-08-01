@@ -102,12 +102,18 @@ class SherlockPlugin:
                         url=row["url_user"] or None,
                         evidence={
                             "http_status": row["http_status"],
-                            "response_time_s": row["response_time_s"],
+                            "response_time_s": self._round_response_time(row["response_time_s"]),
                             "site_status": row["exists"],
                         },
                     )
                 )
         return findings
+
+    def _round_response_time(self, raw: str) -> str:
+        try:
+            return str(round(float(raw), 2))
+        except (TypeError, ValueError):
+            return raw
 
     def _error(self, entity: str, reason: str) -> Finding:
         return Finding(

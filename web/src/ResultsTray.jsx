@@ -1,4 +1,5 @@
 import { CloseIcon } from './icons.jsx'
+import { truncateForDisplay } from './textUtils.js'
 
 function chipSummary(result) {
   if (result.error) return 'error'
@@ -14,8 +15,8 @@ export default function ResultsTray({ results, onOpen, onClose }) {
     <div className="results-tray">
       {results.map((r) => (
         <div key={r.id} className={`results-chip type-${r.family.entity_type}`}>
-          <button type="button" className="results-chip-body" onClick={() => onOpen(r.id)} title={`${r.family.label} — ${r.entity}`}>
-            <span className="results-chip-label">{r.family.label} — {r.entity}</span>
+          <button type="button" className="results-chip-body" onClick={() => onOpen(r.id)} title={truncateForDisplay(`${r.family.label} — ${r.entity}`, 300)}>
+            <span className="results-chip-label">{r.family.label} — {truncateForDisplay(r.entity)}</span>
             <span className="results-chip-summary">{chipSummary(r)}</span>
           </button>
           <button type="button" className="results-chip-close" onClick={() => onClose(r.id)} aria-label="Discard">

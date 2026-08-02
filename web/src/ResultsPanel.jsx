@@ -5,6 +5,7 @@ import FindingDetailModal from './FindingDetailModal.jsx'
 import { CloseIcon, EyeIcon, MinimizeIcon } from './icons.jsx'
 import PreviewModal from './PreviewModal.jsx'
 import StatusBadge from './StatusBadge.jsx'
+import { truncateForDisplay } from './textUtils.js'
 
 const STATUS_FILTERS = [
   { status: 'FOUND', label: 'found' },
@@ -158,7 +159,9 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
       <div className="results-modal-backdrop" onClick={onMinimize} />
       <section className={`results-modal type-${family.entity_type}`} role="dialog" aria-modal="true">
         <div className="results-modal-head">
-          <h2 title={`${family.label} — ${entity}`}>{family.label} <span className="results-panel-entity">— {entity}</span></h2>
+          <h2 title={truncateForDisplay(`${family.label} — ${entity}`, 300)}>
+            {family.label} <span className="results-panel-entity">— {truncateForDisplay(entity)}</span>
+          </h2>
           <div className="results-modal-head-actions">
             {findings && findings.length > 0 && (
               <>

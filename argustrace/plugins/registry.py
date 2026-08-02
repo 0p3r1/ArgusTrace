@@ -511,16 +511,16 @@ TOOL_FAMILIES = {
         "label": "Image metadata (EXIF)",
         "entity_type": "image",
         "description": (
-            "Reads EXIF/metadata from an image URL or an uploaded file — camera model, GPS "
-            "coordinates, timestamps, software history, and more, via exiftool."
+            "Reads metadata from an image URL or an uploaded file (photos, RAW, video, and more) — "
+            "camera model, GPS coordinates, timestamps, software history, and more, via exiftool."
         ),
-        "repo_url": "https://exiftool.org",
+        "repo_url": "https://github.com/exiftool/exiftool",
         "docs_url": "https://exiftool.org/TagNames/index.html",
         "examples": [
             {"label": "Public sample photo", "entity": "https://upload.wikimedia.org/wikipedia/commons/a/a7/Camponotus_flavomarginatus_ant.jpg"},
         ],
         "variants": {
-            "exif": {"variant_label": "Default", "speed": "~2-5s", "fast": True},
+            "exif": {"variant_label": "Default", "speed": "~2-15s", "fast": True},
         },
         "options": [],
         "native_reports": [],

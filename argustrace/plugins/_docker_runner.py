@@ -29,8 +29,16 @@ async def run_hardened(
     timeout_s: int,
     volume: tuple[str, str] | None = None,
     env: dict[str, str] | None = None,
+    network: str | None = None,
 ) -> DockerRunResult:
     cmd = ["docker", "run", "--rm", *HARDENING_FLAGS]
+    if network is not None:
+        # Extra isolation for plugins that don't need network at all for a
+        # given call (e.g. exiftool reading an already-local uploaded file):
+        # even a fully compromised process inside the container has nowhere
+        # to reach out to. Not the default because most plugins do need
+        # network to reach the tool/site they're checking.
+        cmd += [f"--network={network}"]
     if volume is not None:
         host_path, container_path = volume
         cmd += ["-v", f"{host_path}:{container_path}"]

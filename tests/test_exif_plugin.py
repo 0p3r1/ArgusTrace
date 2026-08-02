@@ -2,10 +2,13 @@ import base64
 import json
 
 from argustrace.core.models import Status
+from argustrace.plugins import exif_plugin
+from argustrace.plugins._docker_runner import DockerRunResult
 from argustrace.plugins.exif_plugin import DATA_URI_PATTERN, MAX_BYTES, ExifPlugin
 
-# A minimal, valid 1x1 JPEG (SOI + APP0/JFIF + a few segments + EOI) — real
-# magic bytes so the plugin's own signature check passes, no fixture file needed.
+# A minimal, valid 1x1 JPEG (SOI + APP0/JFIF + a few segments + EOI) — no
+# longer load-bearing for validation (the plugin doesn't gate on content
+# anymore), just realistic-looking bytes for the "upload succeeds" tests.
 TINY_JPEG = bytes.fromhex(
     "ffd8ffe000104a46494600010100000100010000ffdb004300"
     + "ff" * 64
@@ -60,29 +63,42 @@ async def test_unresolvable_host_is_error():
     assert "could not resolve" in findings[0].evidence["reason"]
 
 
-def test_prepare_upload_rejects_wrong_magic_bytes():
+def test_prepare_upload_accepts_any_declared_mime(tmp_path):
+    # No allowlist anymore — a RAW/video/whatever mime is accepted just the
+    # same, since real safety comes from the sandbox, not guessing the format.
     plugin = ExifPlugin()
-    match = DATA_URI_PATTERN.match(_data_uri("image/jpeg", b"not actually a jpeg"))
+    match = DATA_URI_PATTERN.match(_data_uri("image/x-canon-cr2", TINY_JPEG))
 
-    error = plugin._prepare_upload("/tmp", match)
+    error = plugin._prepare_upload(str(tmp_path), match)
+
+    assert error is None
+    assert (tmp_path / "input").read_bytes() == TINY_JPEG
+
+
+def test_prepare_upload_accepts_blank_mime(tmp_path):
+    # Browsers commonly report an empty type for formats they don't
+    # recognize (most RAW files) — must not be treated as invalid.
+    plugin = ExifPlugin()
+    match = DATA_URI_PATTERN.match(f"data:;base64,{base64.b64encode(TINY_JPEG).decode()}")
+
+    error = plugin._prepare_upload(str(tmp_path), match)
+
+    assert error is None
+
+
+def test_prepare_upload_rejects_empty_payload(tmp_path):
+    plugin = ExifPlugin()
+    match = DATA_URI_PATTERN.match(_data_uri("image/jpeg", b""))
+
+    error = plugin._prepare_upload(str(tmp_path), match)
 
     assert error is not None
-    assert "doesn't look like a valid" in error
-
-
-def test_prepare_upload_rejects_unsupported_mime():
-    plugin = ExifPlugin()
-    match = DATA_URI_PATTERN.match(_data_uri("image/svg+xml", TINY_JPEG))
-
-    error = plugin._prepare_upload("/tmp", match)
-
-    assert error is not None
-    assert "unsupported image type" in error
+    assert "empty" in error
 
 
 def test_prepare_upload_rejects_oversized_payload(tmp_path):
     plugin = ExifPlugin()
-    huge = b"\xff\xd8\xff" + b"0" * (MAX_BYTES + 1)
+    huge = b"0" * (MAX_BYTES + 1)
     match = DATA_URI_PATTERN.match(_data_uri("image/jpeg", huge))
 
     error = plugin._prepare_upload(str(tmp_path), match)
@@ -104,6 +120,36 @@ def test_prepare_upload_writes_file_for_valid_jpeg(tmp_path):
 def test_data_uri_pattern_rejects_non_data_uri():
     plugin = ExifPlugin()
     assert DATA_URI_PATTERN.match("https://example.com/a.jpg") is None
+
+
+async def test_run_disables_network_for_uploaded_file(monkeypatch):
+    captured = {}
+
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        captured["network"] = network
+        return DockerRunResult(ok=True, returncode=0, stdout=b"[{}]", stderr=b"", error=None)
+
+    monkeypatch.setattr(exif_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = ExifPlugin()
+    await plugin.run(_data_uri("image/jpeg", TINY_JPEG))
+
+    assert captured["network"] == "none"
+
+
+async def test_run_keeps_default_network_for_url(monkeypatch):
+    captured = {}
+
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        captured["network"] = network
+        return DockerRunResult(ok=True, returncode=0, stdout=b"[{}]", stderr=b"", error=None)
+
+    monkeypatch.setattr(exif_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = ExifPlugin()
+    await plugin.run("https://upload.wikimedia.org/wikipedia/commons/a/a7/ant.jpg")
+
+    assert captured["network"] is None
 
 
 def test_parse_output_error_tag_is_error():

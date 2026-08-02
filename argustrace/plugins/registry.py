@@ -1,5 +1,6 @@
 from argustrace.plugins import maigret_plugin, theharvester_plugin
 from argustrace.plugins.crtsh_plugin import CrtShPlugin
+from argustrace.plugins.exif_plugin import ExifPlugin
 from argustrace.plugins.holehe_plugin import HolehePlugin
 from argustrace.plugins.ignorant_plugin import IgnorantPlugin
 from argustrace.plugins.ip_plugin import IPPlugin
@@ -31,6 +32,7 @@ PLUGINS = {
     "theharvester-broad": TheHarvesterPlugin(sources=BROAD_SOURCES),  # several free sources combined
     "ip": IPPlugin(),
     "recherche-entreprises": RechercheEntreprisesPlugin(),
+    "exif": ExifPlugin(),
 }
 
 # Human-facing metadata for the web UI, grouped by tool "family" so
@@ -64,6 +66,8 @@ TOOL_FAMILIES = {
         "options": [],
         "native_reports": [],
         "version_check": {"method": "none"},
+        "source_kind": "cli_tool",
+        "requires_key": False,
     },
     "sherlock": {
         "label": "Sherlock",
@@ -106,6 +110,8 @@ TOOL_FAMILIES = {
         # Pinned by image digest (see sherlock_plugin.IMAGE) at Sherlock v0.16.0.
         # Bumping the digest must also bump this constant.
         "version_check": {"method": "dockerhub", "repository": "sherlock/sherlock", "pinned_version": "0.16.0"},
+        "source_kind": "cli_tool",
+        "requires_key": False,
     },
     "maigret": {
         "label": "Maigret",
@@ -211,6 +217,8 @@ TOOL_FAMILIES = {
         # no tag to match "0.6.3" against. The PyPI package uses clean
         # semver releases that line up with the Docker image's version.
         "version_check": {"method": "pypi", "package": "maigret", "pinned_version": "0.6.3"},
+        "source_kind": "cli_tool",
+        "requires_key": False,
     },
     "holehe": {
         "label": "Holehe",
@@ -244,6 +252,8 @@ TOOL_FAMILIES = {
             },
         ],
         "version_check": {"method": "pypi", "package": "holehe", "pinned_version": "1.61"},
+        "source_kind": "cli_tool",
+        "requires_key": False,
     },
     "ignorant": {
         "label": "Ignorant",
@@ -264,6 +274,8 @@ TOOL_FAMILIES = {
         ],
         "native_reports": [],  # no native CLI at all — we drive the library directly
         "version_check": {"method": "pypi", "package": "ignorant", "pinned_version": "1.2"},
+        "source_kind": "cli_tool",
+        "requires_key": False,
     },
     "crtsh": {
         "label": "crt.sh",
@@ -284,6 +296,8 @@ TOOL_FAMILIES = {
             },
         ],
         "version_check": {"method": "none"},
+        "source_kind": "api",
+        "requires_key": False,
     },
     "theharvester": {
         "label": "theHarvester",
@@ -336,6 +350,8 @@ TOOL_FAMILIES = {
         ],
         # Pinned by git tag in docker/theharvester/Dockerfile (--branch 4.11.1).
         "version_check": {"method": "github_releases", "repo": "laramies/theHarvester", "pinned_version": "4.11.1"},
+        "source_kind": "cli_tool",
+        "requires_key": False,
     },
     "ip": {
         "label": "IP Lookup",
@@ -360,6 +376,8 @@ TOOL_FAMILIES = {
         ],
         "native_reports": [],
         "version_check": {"method": "none"},
+        "source_kind": "api",
+        "requires_key": False,
     },
     "recherche-entreprises": {
         "label": "Recherche d'entreprises",
@@ -486,5 +504,28 @@ TOOL_FAMILIES = {
         ],
         "native_reports": [],
         "version_check": {"method": "none"},
+        "source_kind": "api",
+        "requires_key": False,
+    },
+    "exif": {
+        "label": "Image metadata (EXIF)",
+        "entity_type": "image",
+        "description": (
+            "Reads EXIF/metadata from an image URL or an uploaded file — camera model, GPS "
+            "coordinates, timestamps, software history, and more, via exiftool."
+        ),
+        "repo_url": "https://exiftool.org",
+        "docs_url": "https://exiftool.org/TagNames/index.html",
+        "examples": [
+            {"label": "Public sample photo", "entity": "https://upload.wikimedia.org/wikipedia/commons/a/a7/Camponotus_flavomarginatus_ant.jpg"},
+        ],
+        "variants": {
+            "exif": {"variant_label": "Default", "speed": "~2-5s", "fast": True},
+        },
+        "options": [],
+        "native_reports": [],
+        "version_check": {"method": "none"},
+        "source_kind": "cli_tool",
+        "requires_key": False,
     },
 }

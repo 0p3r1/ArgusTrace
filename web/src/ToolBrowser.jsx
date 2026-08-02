@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { SearchIcon } from './icons.jsx'
+import ToolBadges from './ToolBadges.jsx'
 import VersionBadge from './VersionBadge.jsx'
 
 function ToolCard({ family, onOpen }) {
@@ -20,8 +21,11 @@ function ToolCard({ family, onOpen }) {
       }}
     >
       <div className="tool-card-head">
-        <span className="tool-card-name">{family.label}</span>
-        <VersionBadge version={family.version} compact />
+        <span className="tool-card-name" title={family.label}>{family.label}</span>
+        <div className="tool-card-head-badges">
+          <ToolBadges family={family} />
+          <VersionBadge version={family.version} compact />
+        </div>
       </div>
 
       <p className="tool-card-desc">{family.description}</p>

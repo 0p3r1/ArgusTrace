@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import AdvancedOptionsPanel from './AdvancedOptionsPanel.jsx'
 import { CloseIcon } from './icons.jsx'
+import ImageEntityInput from './ImageEntityInput.jsx'
 import { fastVariant, slowVariant } from './variants.js'
 import VersionBadge from './VersionBadge.jsx'
 
@@ -10,6 +12,7 @@ export default function RunDrawer({
   onToggleFastMode,
   optionValues,
   onOptionChange,
+  onClearOptions,
   entity,
   onEntityChange,
   onSubmit,
@@ -17,6 +20,9 @@ export default function RunDrawer({
   onCheckVersion,
   checkingVersion,
 }) {
+  const hasOptionValues = Object.values(optionValues || {}).some((v) => v !== undefined)
+  const [clearedFlash, setClearedFlash] = useState(false)
+
   if (!family) return null
 
   const hasVariantChoice = family.variants.length > 1
@@ -24,6 +30,12 @@ export default function RunDrawer({
   const activeVariant = hasVariantChoice
     ? (fastMode ? fastVariant(family) : slowVariant(family))
     : family.variants[0]
+
+  function handleClearOptions() {
+    onClearOptions()
+    setClearedFlash(true)
+    setTimeout(() => setClearedFlash(false), 1200)
+  }
 
   return (
     <>
@@ -64,26 +76,42 @@ export default function RunDrawer({
             </div>
           )}
 
-          {!fastMode && (
-            <AdvancedOptionsPanel
-              family={family}
-              values={optionValues}
-              onChange={onOptionChange}
-              defaultOpen
-            />
+          {!fastMode && family.options.length > 0 && (
+            <div className="advanced-options-wrap">
+              <AdvancedOptionsPanel
+                family={family}
+                values={optionValues}
+                onChange={onOptionChange}
+                defaultOpen
+              />
+              <button
+                type="button"
+                className="clear-options-button"
+                onClick={handleClearOptions}
+                disabled={!hasOptionValues}
+              >
+                {clearedFlash ? 'Cleared ✓' : 'Clear options'}
+              </button>
+            </div>
           )}
 
-          <label className="field-label" htmlFor="entity-input">
-            Entity to investigate
-            {family.entity_type === 'company' && <span className="field-label-hint"> (optional if a person/location filter is set below)</span>}
-          </label>
-          <input
-            id="entity-input"
-            type="text"
-            placeholder={family.examples[0]?.entity ?? family.entity_type}
-            value={entity}
-            onChange={(e) => onEntityChange(e.target.value)}
-          />
+          {family.entity_type === 'image' ? (
+            <ImageEntityInput entity={entity} onEntityChange={onEntityChange} />
+          ) : (
+            <>
+              <label className="field-label" htmlFor="entity-input">
+                Entity to investigate
+                {family.entity_type === 'company' && <span className="field-label-hint"> (optional if a person/location filter is set below)</span>}
+              </label>
+              <input
+                id="entity-input"
+                type="text"
+                placeholder={family.examples[0]?.entity ?? family.entity_type}
+                value={entity}
+                onChange={(e) => onEntityChange(e.target.value)}
+              />
+            </>
+          )}
 
           <button type="submit" className="submit-button" disabled={loading}>
             {loading ? 'Investigating…' : 'Investigate'}

@@ -14,7 +14,7 @@ export default function ResultsTray({ results, onOpen, onClose }) {
     <div className="results-tray">
       {results.map((r) => (
         <div key={r.id} className={`results-chip type-${r.family.entity_type}`}>
-          <button type="button" className="results-chip-body" onClick={() => onOpen(r.id)}>
+          <button type="button" className="results-chip-body" onClick={() => onOpen(r.id)} title={`${r.family.label} — ${r.entity}`}>
             <span className="results-chip-label">{r.family.label} — {r.entity}</span>
             <span className="results-chip-summary">{chipSummary(r)}</span>
           </button>

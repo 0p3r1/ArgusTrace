@@ -1,4 +1,5 @@
-import { CloseIcon } from './icons.jsx'
+import { useState } from 'react'
+import { CheckIcon, CloseIcon, CopyIcon } from './icons.jsx'
 import StatusBadge from './StatusBadge.jsx'
 
 // Fields already given their own dedicated spot in the modal (subtitle, map
@@ -74,6 +75,55 @@ function fieldLabel(key) {
   return key.replaceAll('_', ' ')
 }
 
+// Plain-text counterpart to formatFieldValue — clipboard content should be
+// pasteable text, not JSX, so arrays/objects get flattened differently here.
+function plainTextValue(value) {
+  if (Array.isArray(value)) {
+    if (typeof value[0] === 'object' && value[0] !== null) {
+      return value
+        .map((item) =>
+          item.nom || item.prenoms
+            ? [item.prenoms, item.nom].filter(Boolean).join(' ') + (item.qualite ? ` — ${item.qualite}` : '')
+            : item.denomination
+              ? item.denomination + (item.qualite ? ` — ${item.qualite}` : '')
+              : JSON.stringify(item)
+        )
+        .join(', ')
+    }
+    return value.join(', ')
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.entries(value).map(([k, v]) => `${k}: ${v}`).join(', ')
+  }
+  return String(value)
+}
+
+function CopyButton({ value, label }) {
+  const [copied, setCopied] = useState(false)
+
+  async function handleCopy(e) {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {
+      // Clipboard access denied/unavailable — nothing meaningful to recover into.
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      className="copy-field-button"
+      onClick={handleCopy}
+      aria-label={`Copy ${label}`}
+    >
+      {copied ? <CheckIcon /> : <CopyIcon />}
+    </button>
+  )
+}
+
 export default function FindingDetailModal({ finding, onClose }) {
   const evidence = finding.evidence || {}
   const profile = evidence.profile
@@ -103,8 +153,18 @@ export default function FindingDetailModal({ finding, onClose }) {
               onError={(e) => { e.currentTarget.style.display = 'none' }}
             />
           )}
-          {evidence.headline && <p className="detail-modal-headline">{evidence.headline}</p>}
-          {finding.url && <a className="detail-modal-url" href={finding.url} target="_blank" rel="noreferrer">{finding.url}</a>}
+          {evidence.headline && (
+            <p className="detail-modal-headline">
+              {evidence.headline}
+              <CopyButton value={evidence.headline} label="headline" />
+            </p>
+          )}
+          {finding.url && (
+            <p className="detail-modal-url-row">
+              <a className="detail-modal-url" href={finding.url} target="_blank" rel="noreferrer">{finding.url}</a>
+              <CopyButton value={finding.url} label="URL" />
+            </p>
+          )}
           {evidence.reason && <p className="error-message">{evidence.reason}</p>}
           {coords && (
             <a
@@ -122,7 +182,10 @@ export default function FindingDetailModal({ finding, onClose }) {
               {fields.map(([key, value]) => (
                 <div key={key} className="detail-field-row">
                   <dt>{fieldLabel(key)}</dt>
-                  <dd>{formatFieldValue(value)}</dd>
+                  <dd>
+                    {formatFieldValue(value)}
+                    <CopyButton value={plainTextValue(value)} label={fieldLabel(key)} />
+                  </dd>
                 </div>
               ))}
             </dl>

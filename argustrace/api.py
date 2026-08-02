@@ -81,6 +81,9 @@ class ToolFamily(BaseModel):
     docs_url: str | None = None
     examples: list[ToolExample] = []
     hidden: bool = False
+    source_kind: Literal["api", "cli_tool"] = "cli_tool"
+    requires_key: bool = False
+    key_note: str | None = None
 
 
 def _version_info(family: str, version_check: dict) -> VersionInfo:
@@ -117,6 +120,9 @@ def list_plugins() -> list[ToolFamily]:
             docs_url=info["docs_url"],
             examples=[ToolExample(**ex) for ex in info["examples"]],
             hidden=info.get("hidden", False),
+            source_kind=info["source_kind"],
+            requires_key=info.get("requires_key", False),
+            key_note=info.get("key_note"),
         )
         for family, info in TOOL_FAMILIES.items()
     ]

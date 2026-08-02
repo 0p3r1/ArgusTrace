@@ -1,19 +1,16 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import './App.css'
 import { GitHubIcon } from './icons.jsx'
-import { useToolFamilies } from './useToolFamilies.js'
-import { useVersionCheck } from './useVersionCheck.js'
+import ToolBadges from './ToolBadges.jsx'
 import VersionBadge from './VersionBadge.jsx'
 
-export default function ToolInfoPage() {
+export default function ToolInfoPage({ families, checkVersion, checkingFamily, onOpenTool }) {
   const { family: familyKey } = useParams()
   const navigate = useNavigate()
-  const { families, loading, setFamilies } = useToolFamilies()
-  const { checkVersion, checkingFamily } = useVersionCheck(setFamilies)
 
   const family = families.find((f) => f.family === familyKey)
 
-  if (loading) return <main><p className="muted">Loading…</p></main>
+  if (families.length === 0) return <main><p className="muted">Loading…</p></main>
 
   if (!family) {
     return (
@@ -28,7 +25,8 @@ export default function ToolInfoPage() {
   const isGitHub = family.repo_url?.includes('github.com')
 
   function handleUseThisTool() {
-    navigate(`/?family=${family.family}`)
+    onOpenTool(family.family)
+    navigate('/')
   }
 
   return (
@@ -37,7 +35,10 @@ export default function ToolInfoPage() {
       <p className="breadcrumbs"><span>{family.entity_type}</span><span className="breadcrumb-sep">/</span><span>{family.label}</span></p>
 
       <div className="tool-info-head">
-        <h2>{family.label}</h2>
+        <div className="tool-info-head-title">
+          <h2>{family.label}</h2>
+          <ToolBadges family={family} />
+        </div>
         <p className="tool-info-description">{family.description}</p>
       </div>
 

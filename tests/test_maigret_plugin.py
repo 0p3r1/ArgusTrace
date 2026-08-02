@@ -4,6 +4,8 @@ from pathlib import Path
 import pytest
 
 from argustrace.core.models import Status
+from argustrace.plugins import maigret_plugin
+from argustrace.plugins._docker_runner import DockerRunResult
 from argustrace.plugins.maigret_plugin import MaigretPlugin, generate_report
 
 
@@ -160,3 +162,46 @@ def test_build_args_enrich_flag():
     plugin = MaigretPlugin()
     args = plugin._build_args("alice", {"enrich": True})
     assert "--enrich" in args
+
+
+async def test_run_still_returns_findings_when_maigret_exits_nonzero_after_writing_report(monkeypatch):
+    # Verified against the real pinned image: Maigret can exit non-zero
+    # *after* successfully writing its CSV/JSON reports, because it then
+    # tries to update its own site-database cache under site-packages —
+    # blocked by our --read-only hardening, unrelated to the scan itself.
+    # A crash at that stage must not discard an otherwise-successful run.
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None):
+        host_path, _container_path = volume
+        csv_path = Path(host_path) / "report_alice.csv"
+        with csv_path.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["username", "name", "url_main", "url_user", "exists", "http_status", "error_reason"])
+            writer.writerow(["alice", "GitHub", "https://github.com/", "https://github.com/alice", "Claimed", "200", ""])
+        return DockerRunResult(
+            ok=True, returncode=1, stdout=b"", stderr=b"OSError: Read-only file system", error=None,
+        )
+
+    monkeypatch.setattr(maigret_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = MaigretPlugin()
+    findings = await plugin.run("alice")
+
+    assert len(findings) == 1
+    assert findings[0].status == Status.FOUND
+    assert findings[0].source == "maigret:GitHub"
+
+
+async def test_run_is_still_an_error_when_nonzero_exit_and_no_report_written(monkeypatch):
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None):
+        return DockerRunResult(
+            ok=True, returncode=1, stdout=b"", stderr=b"some real crash before writing anything", error=None,
+        )
+
+    monkeypatch.setattr(maigret_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = MaigretPlugin()
+    findings = await plugin.run("alice")
+
+    assert len(findings) == 1
+    assert findings[0].status == Status.ERROR
+    assert "docker run failed" in findings[0].evidence["reason"]

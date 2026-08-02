@@ -54,11 +54,18 @@ class MaigretPlugin:
             )
             if not result.ok:
                 return [self._error(entity, result.error)]
-            if result.returncode != 0:
-                return [self._error(entity, f"docker run failed: {result.stderr.decode(errors='replace')[:500]}")]
 
             csv_path = Path(tmpdir) / f"report_{entity}.csv"
             if not csv_path.exists():
+                # Verified against the real pinned image: Maigret can exit
+                # non-zero *after* successfully writing its reports, because
+                # it then tries to update its own site-database cache under
+                # site-packages/maigret/resources — blocked by our
+                # --read-only hardening, unrelated to the scan itself. Only
+                # treat a non-zero exit as a real failure when the report
+                # it should have produced is actually missing.
+                if result.returncode != 0:
+                    return [self._error(entity, f"docker run failed: {result.stderr.decode(errors='replace')[:500]}")]
                 return [self._error(entity, "maigret produced no CSV output")]
 
             json_path = Path(tmpdir) / f"report_{entity}_ndjson.json"
@@ -215,10 +222,12 @@ async def generate_report(entity: str, report_format: str) -> bytes:
         )
         if not result.ok:
             raise ValueError(result.error)
-        if result.returncode != 0:
-            raise ValueError(f"docker run failed: {result.stderr.decode(errors='replace')[:500]}")
 
         report_path = Path(tmpdir) / spec["filename"].format(entity=entity)
         if not report_path.exists():
+            # Same non-fatal-nonzero-exit case as run() above — only a real
+            # failure if the report itself is missing.
+            if result.returncode != 0:
+                raise ValueError(f"docker run failed: {result.stderr.decode(errors='replace')[:500]}")
             raise ValueError(f"maigret produced no {report_format} output")
         return report_path.read_bytes()

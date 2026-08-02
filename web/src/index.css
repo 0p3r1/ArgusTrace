@@ -44,18 +44,19 @@
      here even though they'd add variety: this app already spends that
      part of the wheel on status meaning (found=green, error=amber,
      behind=orange, outdated=red), so reusing it for decoration would
-     make a stripe look like a status signal. Blue → violet → pink → teal
-     stays vivid and varied while keeping clear hue separation (~40°+
-     apart) from those semantic colors and from each other. ip/company
-     were added later and had to fit in the one remaining gap (between
-     violet and pink) without reshuffling the original four. */
-  --type-username: #8b5cf6;
-  --type-email: #3b82f6;
-  --type-phone: #ec4899;
-  --type-domain: #14b8a6;
-  --type-ip: #bb4ceb;
-  --type-company: #eb4cdb;
-  --type-image: #06b6d4;
+     make a stripe look like a status signal.
+     A single sequential sweep — cyan (anchored to --accent) → blue →
+     violet → purple → magenta → pink — with hue, saturation and
+     lightness all shifting together step to step, the same "gradient"
+     feel as a reference palette the user liked, instead of picking
+     vivid points at arbitrary angles around the wheel. */
+  --type-domain: #119ba7;
+  --type-image: #1390d8;
+  --type-email: #3772e6;
+  --type-username: #6b58e4;
+  --type-ip: #a554de;
+  --type-company: #db43d6;
+  --type-phone: #df4994;
   --type-any: #64748b;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;

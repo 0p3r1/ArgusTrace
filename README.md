@@ -121,6 +121,8 @@ docker build -t argustrace-holehe:1.61 -f docker/holehe/Dockerfile .
 docker build -t argustrace-ignorant:1.2 -f docker/ignorant/Dockerfile .
 docker build -t argustrace-curl:1.0 -f docker/curl/Dockerfile .
 docker build -t argustrace-theharvester:4.11.1 -f docker/theharvester/Dockerfile .
+docker build -t argustrace-exiftool:1.0 -f docker/exiftool/Dockerfile .
+docker build -t argustrace-toutatis:1.0 -f docker/toutatis/Dockerfile .
 ```
 
 The web frontend needs Node.js/npm; install its dependencies once:
@@ -154,6 +156,8 @@ growing, and prose doesn't scale past a handful of entries.
 | theHarvester (broad) | domain   | `theharvester-broad`  | ~30-60s       | 4 free sources combined        |
 | IP Lookup           | ip       | `ip`                  | ~2-5s         | RDAP + geolocation, no API key |
 | Recherche d'entreprises | company | `recherche-entreprises` | ~2s      | France's open company registry |
+| Image metadata (EXIF) | image  | `exif`                | ~2-15s        | any format exiftool reads, URL or upload |
+| Toutatis            | username | `toutatis`            | ~2-5s         | Instagram profile info; optional session cookie for full data |
 
 Output is a JSON array of `Finding` objects. Run
 `uv run python -m argustrace.cli options` with no argument for this same

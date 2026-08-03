@@ -9,6 +9,7 @@ from argustrace.plugins.mock_plugin import MockPlugin
 from argustrace.plugins.recherche_entreprises_plugin import RechercheEntreprisesPlugin
 from argustrace.plugins.sherlock_plugin import SherlockPlugin
 from argustrace.plugins.theharvester_plugin import BROAD_SOURCES, TheHarvesterPlugin
+from argustrace.plugins.toutatis_plugin import ToutatisPlugin
 
 # Native report generation is a separate, optional capability from the
 # Plugin protocol (see plugins/base.py) — a family only appears here if its
@@ -33,6 +34,7 @@ PLUGINS = {
     "ip": IPPlugin(),
     "recherche-entreprises": RechercheEntreprisesPlugin(),
     "exif": ExifPlugin(),
+    "toutatis": ToutatisPlugin(),
 }
 
 # Human-facing metadata for the web UI, grouped by tool "family" so
@@ -524,6 +526,44 @@ TOOL_FAMILIES = {
         },
         "options": [],
         "native_reports": [],
+        "version_check": {"method": "none"},
+        "source_kind": "cli_tool",
+        "requires_key": False,
+    },
+    "toutatis": {
+        "label": "Toutatis",
+        "entity_type": "username",
+        "description": (
+            "Extracts Instagram profile info (bio, followers, obfuscated email/phone) for a username. "
+            "Works for a request or two without a session cookie (with redacted data), but Instagram "
+            "rate-limits/blocks unauthenticated requests fast — a session cookie is needed for anything "
+            "beyond an occasional one-off lookup."
+        ),
+        "repo_url": "https://github.com/megadose/toutatis",
+        "docs_url": "https://github.com/megadose/toutatis#-usage",
+        "examples": [{"label": "Public account", "entity": "instagram"}],
+        "variants": {
+            "toutatis": {"variant_label": "Default", "speed": "~2-5s", "fast": True},
+        },
+        "options": [
+            {
+                "name": "session_id", "flag": "--sessionid", "type": "secret", "required": False, "default": None,
+                "description": (
+                    "Your own Instagram account's 'sessionid' cookie. Optional, but verified against the "
+                    "real API: without one, Instagram returns redacted data for maybe the first request "
+                    "and then rate-limits/blocks the next ones — a session is needed for reliable use, "
+                    "not just for the obfuscated email/phone lookup. Using a real account's session for "
+                    "automated requests violates Instagram's Terms of Service and risks that account being "
+                    "flagged or banned — use a throwaway account if you provide one, never your main one. "
+                    "Sent to the container via an environment variable, never logged, never included in "
+                    "any error message."
+                ),
+            },
+        ],
+        "native_reports": [],
+        # Pinned by commit SHA in docker/toutatis/Dockerfile (no git tags
+        # exist for this repo, and the latest PyPI release predates a real
+        # API cleanup upstream) — nothing meaningful to version-check against.
         "version_check": {"method": "none"},
         "source_kind": "cli_tool",
         "requires_key": False,

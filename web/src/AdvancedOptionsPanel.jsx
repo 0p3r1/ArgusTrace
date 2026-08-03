@@ -2,6 +2,15 @@ function OptionInput({ option, value, onChange }) {
   const current = value !== undefined ? value : option.default
 
   switch (option.type) {
+    case 'secret':
+      return (
+        <input
+          type="password"
+          autoComplete="off"
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.value)}
+        />
+      )
     case 'int':
       return (
         <input

@@ -36,7 +36,7 @@ class ToolVariant(BaseModel):
 class ToolOption(BaseModel):
     name: str
     flag: str
-    type: Literal["int", "str", "bool", "enum", "enum_multi"]
+    type: Literal["int", "str", "bool", "enum", "enum_multi", "secret"]
     required: bool = False
     default: object | None = None
     min: int | None = None

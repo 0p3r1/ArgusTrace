@@ -6,10 +6,13 @@ from argustrace.plugins.ignorant_plugin import IgnorantPlugin
 from argustrace.plugins.ip_plugin import IPPlugin
 from argustrace.plugins.maigret_plugin import MaigretPlugin
 from argustrace.plugins.mock_plugin import MockPlugin
+from argustrace.plugins.name_plugin import NamePlugin
 from argustrace.plugins.recherche_entreprises_plugin import RechercheEntreprisesPlugin
 from argustrace.plugins.sherlock_plugin import SherlockPlugin
 from argustrace.plugins.theharvester_plugin import BROAD_SOURCES, TheHarvesterPlugin
 from argustrace.plugins.toutatis_plugin import ToutatisPlugin
+from argustrace.plugins.vatcomply_plugin import VatComplyPlugin
+from argustrace.plugins.wayback_plugin import WaybackPlugin
 
 # Native report generation is a separate, optional capability from the
 # Plugin protocol (see plugins/base.py) — a family only appears here if its
@@ -35,6 +38,9 @@ PLUGINS = {
     "recherche-entreprises": RechercheEntreprisesPlugin(),
     "exif": ExifPlugin(),
     "toutatis": ToutatisPlugin(),
+    "name": NamePlugin(),
+    "wayback": WaybackPlugin(),
+    "vatcomply": VatComplyPlugin(),
 }
 
 # Human-facing metadata for the web UI, grouped by tool "family" so
@@ -566,6 +572,64 @@ TOOL_FAMILIES = {
         # API cleanup upstream) — nothing meaningful to version-check against.
         "version_check": {"method": "none"},
         "source_kind": "cli_tool",
+        "requires_key": False,
+    },
+    "name": {
+        "label": "Name analysis",
+        "entity_type": "name",
+        "description": (
+            "Predicts likely gender, age, and nationality for a first name from global naming "
+            "statistics (genderize.io, agify.io, nationalize.io), no API key."
+        ),
+        "repo_url": "https://genderize.io",
+        "docs_url": "https://genderize.io/",
+        "examples": [{"label": "Common French name", "entity": "Jean"}],
+        "variants": {
+            "name": {"variant_label": "Default", "speed": "~1-2s", "fast": True},
+        },
+        "options": [],
+        "native_reports": [],
+        "version_check": {"method": "none"},
+        "source_kind": "api",
+        "requires_key": False,
+    },
+    "wayback": {
+        "label": "Wayback Machine",
+        "entity_type": "domain",
+        "description": (
+            "Lists hosts (subdomains included) ever archived by the Internet Archive for a domain, "
+            "with first/last snapshot dates — a different data source than crt.sh, can surface hosts "
+            "with no certificate history at all. No API key."
+        ),
+        "repo_url": "https://archive.org/help/wayback_api.php",
+        "docs_url": "https://archive.org/help/wayback_api.php",
+        "examples": [{"label": "Well-known domain", "entity": "anthropic.com"}],
+        "variants": {
+            "wayback": {"variant_label": "Default", "speed": "~5-20s", "fast": True},
+        },
+        "options": [],
+        "native_reports": [],
+        "version_check": {"method": "none"},
+        "source_kind": "api",
+        "requires_key": False,
+    },
+    "vatcomply": {
+        "label": "VATComply",
+        "entity_type": "company",
+        "description": (
+            "Validates an EU VAT number and returns the registered company name/address, via the "
+            "official EU VIES system. Covers any EU country, not just France. No API key."
+        ),
+        "repo_url": "https://www.vatcomply.com",
+        "docs_url": "https://www.vatcomply.com/documentation",
+        "examples": [{"label": "French SIREN as VAT (FR + key + SIREN)", "entity": "FR40303265045"}],
+        "variants": {
+            "vatcomply": {"variant_label": "Default", "speed": "~2s", "fast": True},
+        },
+        "options": [],
+        "native_reports": [],
+        "version_check": {"method": "none"},
+        "source_kind": "api",
         "requires_key": False,
     },
 }

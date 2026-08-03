@@ -121,6 +121,7 @@
 .tag-filter.type-domain.active { background: var(--type-domain); color: #fff; }
 .tag-filter.type-ip.active { background: var(--type-ip); color: #fff; }
 .tag-filter.type-company.active { background: var(--type-company); color: #fff; }
+.tag-filter.type-name.active { background: var(--type-name); color: #fff; }
 .tag-filter.type-image.active { background: var(--type-image); color: #fff; }
 
 .fast-toggle {
@@ -158,6 +159,7 @@
 .tool-card.type-domain { border-left-color: var(--type-domain); }
 .tool-card.type-ip { border-left-color: var(--type-ip); }
 .tool-card.type-company { border-left-color: var(--type-company); }
+.tool-card.type-name { border-left-color: var(--type-name); }
 .tool-card.type-image { border-left-color: var(--type-image); }
 
 .tool-card:hover {
@@ -324,6 +326,7 @@
 .run-drawer.type-domain { border-left-color: var(--type-domain); }
 .run-drawer.type-ip { border-left-color: var(--type-ip); }
 .run-drawer.type-company { border-left-color: var(--type-company); }
+.run-drawer.type-name { border-left-color: var(--type-name); }
 .run-drawer.type-image { border-left-color: var(--type-image); }
 
 @media (max-width: 720px) {
@@ -677,6 +680,7 @@
 .results-modal.type-domain { border-top-color: var(--type-domain); }
 .results-modal.type-ip { border-top-color: var(--type-ip); }
 .results-modal.type-company { border-top-color: var(--type-company); }
+.results-modal.type-name { border-top-color: var(--type-name); }
 .results-modal.type-image { border-top-color: var(--type-image); }
 
 .results-modal-head {
@@ -1043,6 +1047,7 @@
 .results-chip.type-domain { border-left-color: var(--type-domain); }
 .results-chip.type-ip { border-left-color: var(--type-ip); }
 .results-chip.type-company { border-left-color: var(--type-company); }
+.results-chip.type-name { border-left-color: var(--type-name); }
 .results-chip.type-image { border-left-color: var(--type-image); }
 
 .results-chip-body {
@@ -1266,6 +1271,7 @@
 .tool-info-page.type-domain { border-left-color: var(--type-domain); }
 .tool-info-page.type-ip { border-left-color: var(--type-ip); }
 .tool-info-page.type-company { border-left-color: var(--type-company); }
+.tool-info-page.type-name { border-left-color: var(--type-name); }
 .tool-info-page.type-image { border-left-color: var(--type-image); }
 
 .back-link {

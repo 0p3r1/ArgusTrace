@@ -142,22 +142,25 @@ uv run python -m argustrace.cli investigate <entity> --plugin <key>
 A table, not a paragraph per tool, on purpose: this list is meant to keep
 growing, and prose doesn't scale past a handful of entries.
 
-| Tool             | Entity   | `--plugin` key      | Speed         | Notes                        |
-| ----------------- | -------- | -------------------- | ------------- | ----------------------------- |
-| Demo               | any      | `mock`               | instant       | no network, proves the pipeline |
-| Sherlock            | username | `sherlock`            | ~5s           | curated ~10-site list          |
-| Sherlock (full)     | username | `sherlock-full`       | 1-3 min       | ~400+ sites                    |
-| Maigret             | username | `maigret`             | ~6s           | top ~15 sites                  |
-| Maigret (full)      | username | `maigret-full`        | several min   | 3000+ sites                    |
-| Holehe              | email    | `holehe`              | ~10s          | ~120 sites                     |
-| Ignorant            | phone    | `ignorant`            | ~5s           | Amazon/Instagram/Snapchat, E164 format |
-| crt.sh              | domain   | `crtsh`               | ~5s*          | Certificate Transparency logs  |
-| theHarvester        | domain   | `theharvester`        | ~10s          | 1 free passive-recon source    |
-| theHarvester (broad) | domain   | `theharvester-broad`  | ~30-60s       | 4 free sources combined        |
-| IP Lookup           | ip       | `ip`                  | ~2-5s         | RDAP + geolocation, no API key |
-| Recherche d'entreprises | company | `recherche-entreprises` | ~2s      | France's open company registry |
-| Image metadata (EXIF) | image  | `exif`                | ~2-15s        | any format exiftool reads, URL or upload |
-| Toutatis            | username | `toutatis`            | ~2-5s         | Instagram profile info; optional session cookie for full data |
+| Tool                    | Entity   | `--plugin` key          | Speed       | Notes                                                         |
+| ----------------------- | -------- | ----------------------- | ----------- | ------------------------------------------------------------- |
+| Demo                    | any      | `mock`                  | instant     | no network, proves the pipeline                               |
+| Sherlock                | username | `sherlock`              | ~5s         | curated ~10-site list                                         |
+| Sherlock (full)         | username | `sherlock-full`         | 1-3 min     | ~400+ sites                                                   |
+| Maigret                 | username | `maigret`               | ~6s         | top ~15 sites                                                 |
+| Maigret (full)          | username | `maigret-full`          | several min | 3000+ sites                                                   |
+| Holehe                  | email    | `holehe`                | ~10s        | ~120 sites                                                    |
+| Ignorant                | phone    | `ignorant`              | ~5s         | Amazon/Instagram/Snapchat, E164 format                        |
+| crt.sh                  | domain   | `crtsh`                 | ~5s\*       | Certificate Transparency logs                                 |
+| theHarvester            | domain   | `theharvester`          | ~10s        | 1 free passive-recon source                                   |
+| theHarvester (broad)    | domain   | `theharvester-broad`    | ~30-60s     | 4 free sources combined                                       |
+| IP Lookup               | ip       | `ip`                    | ~2-5s       | RDAP + geolocation, no API key                                |
+| Recherche d'entreprises | company  | `recherche-entreprises` | ~2s         | France's open company registry                                |
+| Image metadata (EXIF)   | image    | `exif`                  | ~2-15s      | any format exiftool reads, URL or upload                      |
+| Toutatis                | username | `toutatis`              | ~2-5s       | Instagram profile info; optional session cookie for full data |
+| Name analysis           | name     | `name`                  | ~1-2s       | gender/age/nationality prediction, no API key                 |
+| Wayback Machine         | domain   | `wayback`               | ~5-20s      | archived hosts/subdomains, no API key                          |
+| VATComply               | company  | `vatcomply`             | ~2s         | EU-wide VAT number validation, no API key                     |
 
 Output is a JSON array of `Finding` objects. Run
 `uv run python -m argustrace.cli options` with no argument for this same
@@ -197,7 +200,7 @@ Built to stay usable well past today's 8 tools:
   avatars or emoji), and a "has fast mode" toggle. A card shows a ⚡ fast
   badge only when a family actually has a fast/slow tradeoff — most don't.
 - **Run drawer** (`RunDrawer.jsx`): clicking a card slides in a
-  configuration panel — a "Fast mode" toggle (the *only* variant selector;
+  configuration panel — a "Fast mode" toggle (the _only_ variant selector;
   turning it off reveals the advanced-options form, no separate dropdown),
   the entity input, and submit. `AdvancedOptionsPanel.jsx` renders each
   family's `options` schema generically (int/str/bool/enum/enum_multi).
@@ -217,7 +220,7 @@ Built to stay usable well past today's 8 tools:
   several tools can natively produce their own report (Maigret's HTML,
   theHarvester's XML, ...) beyond what we parse into `Finding`s. Each
   family declares exactly what's available and, when it isn't, why — see
-  "Native reports" below. Available ones get a download link *and* an
+  "Native reports" below. Available ones get a download link _and_ an
   in-app preview (👁): HTML renders in a sandboxed iframe, everything else
   as formatted text, without leaving the page.
 - **Version badges** (`VersionBadge.jsx`): green/orange/red/gray pill per
@@ -241,7 +244,7 @@ is **no scheduler and no auto-refresh** — that was ruled out early in this
 project, and a version check is no exception. Results are cached in
 memory only (no persistence), so a restart resets every badge to gray.
 
-Status is classified by *index* in the real, fetched release list (newest
+Status is classified by _index_ in the real, fetched release list (newest
 first), not semver arithmetic: pinned == latest → current; one behind →
 behind; more than one behind → outdated; pinned not found in the fetched
 list (renamed, yanked, or a partial fetch) → **unknown, never a guessed
@@ -327,11 +330,11 @@ confirmed by reading `generate_json_report` in its source, which hard-skips
 anything else. The CSV report doesn't have that limitation, so the plugin
 uses `--csv` instead, giving the same three statuses as Sherlock:
 
-| Maigret status | `Status`                        |
-| --------------- | -------------------------------- |
-| `Claimed`       | `FOUND`                          |
-| `Available`     | `NOT_FOUND`                      |
-| `Unknown`       | `ERROR` (bot protection, blocked, connection error, etc.) |
+| Maigret status | `Status`                                                  |
+| -------------- | --------------------------------------------------------- |
+| `Claimed`      | `FOUND`                                                   |
+| `Available`    | `NOT_FOUND`                                               |
+| `Unknown`      | `ERROR` (bot protection, blocked, connection error, etc.) |
 
 Maigret's JSON report is also the only place it exposes extracted profile
 data (photo, full name, location, follower counts, ...) and recursive-search
@@ -357,13 +360,13 @@ resource limits), but built from a local Dockerfile pinned to a specific
 
 Holehe's own per-site result is mapped onto our `Status`:
 
-| Holehe result                | `Status`    |
-| ----------------------------- | ----------- |
-| `rateLimit: True`             | `ERROR`     |
-| `exists: True`                | `FOUND`     |
+| Holehe result                  | `Status`    |
+| ------------------------------ | ----------- |
+| `rateLimit: True`              | `ERROR`     |
+| `exists: True`                 | `FOUND`     |
 | `exists: False`, no rate limit | `NOT_FOUND` |
 
-Note: Holehe's own code treats *any* exception raised while checking a site
+Note: Holehe's own code treats _any_ exception raised while checking a site
 (network error, parsing failure, actual rate limiting, ...) as `rateLimit:
 True` — it's a catch-all, not a precise signal, which is exactly why our
 `ERROR` status exists as a separate bucket from `NOT_FOUND`.
@@ -512,7 +515,7 @@ finds companies by a director's name with no name/SIREN typed in. Exposed
 options cover every meaningful search axis the API has: person
 (`nom_personne`, `prenoms_personne`, `type_personne`, birth-date range),
 location (`code_postal`, `code_commune`, `departement`, `region` — the
-postal/commune filters match *any* establishment, while the address shown
+postal/commune filters match _any_ establishment, while the address shown
 in results is always the headquarters, which can be a different one),
 legal identity (`etat_administratif`, `categorie_entreprise`,
 `nature_juridique`, `activite_principale`, `section_activite_principale`,

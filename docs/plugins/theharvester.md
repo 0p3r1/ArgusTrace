@@ -27,3 +27,8 @@ results land in the JSON report as `{url: [{fingerprint: service}, ...]}`,
 a shape our generic `name:target`-string parser would mis-handle, and the
 check itself actively probes the target's own infrastructure over HTTP —
 both were confirmed by reading theHarvester's source, not assumed.
+
+The native XML report re-runs the scan on demand, so it takes the variant
+the results came from (`plugin=theharvester-broad`) as a parameter. Without
+it, a broad 4-source scan would hand back a single-source report that
+quietly disagreed with the results table it was downloaded from.

@@ -57,32 +57,50 @@ class IPPlugin:
     async def _rdap(self, entity: str) -> Finding:
         url = RDAP_URL.format(ip=quote(entity, safe=":"))
 
+        http_status: int | None = None
+        body = ""
+        last_error = "unknown error"
+
         for attempt in range(1, RDAP_MAX_ATTEMPTS + 1):
             result = await run_hardened(
-                IMAGE, ["-L", "-H", "Accept: application/rdap+json", url], timeout_s=RUN_TIMEOUT_S,
+                IMAGE,
+                ["-L", "-H", "Accept: application/rdap+json", "-w", "\n%{http_code}", url],
+                timeout_s=RUN_TIMEOUT_S,
             )
-            if result.ok and result.returncode == 0:
-                break
+            if not result.ok:
+                last_error = result.error
+            elif result.returncode != 0:
+                last_error = f"curl failed: {result.stderr.decode(errors='replace')[:300]}"
+            else:
+                stdout = result.stdout.decode(errors="replace")
+                body, _, status_str = stdout.rpartition("\n")
+                http_status = int(status_str) if status_str.isdigit() else None
+                # A real "no RDAP record" is an honest 404 — trust it right
+                # away. Anything else non-2xx (5xx, rate limiting, or an
+                # empty body with no status at all) is a transient failure,
+                # not a confirmed absence, and shouldn't be folded into the
+                # same NOT_FOUND bucket as a genuine 404 — worth retrying
+                # instead (verified live: rdap.org can return an empty body
+                # with curl exit 0 on a transient upstream error).
+                if http_status == 404 or (http_status is not None and 200 <= http_status < 300):
+                    break
+                last_error = f"RDAP returned HTTP {http_status if http_status is not None else 'unknown'}"
+
             if attempt < RDAP_MAX_ATTEMPTS:
                 await asyncio.sleep(RDAP_RETRY_DELAY_S)
 
-        if not result.ok:
-            return self._error(entity, result.error, source="rdap")
-        if result.returncode != 0:
-            return self._error(
-                entity,
-                f"curl failed: {result.stderr.decode(errors='replace')[:300]} (after {RDAP_MAX_ATTEMPTS} attempts)",
-                source="rdap",
-            )
-
-        return self._parse_rdap(entity, result.stdout.decode(errors="replace"))
-
-    def _parse_rdap(self, entity: str, stdout: str) -> Finding:
-        if not stdout.strip():
+        if http_status == 404:
             return Finding(
                 entity=entity, entity_type="ip", source="rdap",
                 status=Status.NOT_FOUND, evidence={"reason": "no RDAP record for this address"},
             )
+        if http_status is not None and 200 <= http_status < 300:
+            return self._parse_rdap(entity, body)
+        return self._error(entity, f"{last_error} (after {RDAP_MAX_ATTEMPTS} attempts)", source="rdap")
+
+    def _parse_rdap(self, entity: str, stdout: str) -> Finding:
+        if not stdout.strip():
+            return self._error(entity, "RDAP returned an empty response despite a successful status", source="rdap")
         try:
             data = json.loads(stdout)
         except json.JSONDecodeError:

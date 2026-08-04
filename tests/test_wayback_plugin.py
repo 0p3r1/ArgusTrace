@@ -60,6 +60,37 @@ async def test_run_reports_docker_failure(monkeypatch):
     assert "curl failed" in findings[0].evidence["reason"]
 
 
+def test_parse_rows_flags_truncation_when_row_limit_reached(monkeypatch):
+    # Getting back exactly ROW_LIMIT data rows means the real result set
+    # may have been larger and silently cut off by our own `limit` param —
+    # this must be surfaced, not silently under-reported as if complete.
+    monkeypatch.setattr(wayback_plugin, "ROW_LIMIT", 2)
+    plugin = WaybackPlugin()
+    rows = [
+        ["original", "timestamp", "statuscode"],
+        ["http://www.example.com/", "20000304021913", "200"],
+        ["http://api.example.com/v1", "20150601000000", "200"],
+    ]
+
+    findings = plugin._parse_rows("example.com", rows)
+
+    assert all("truncated" in f.evidence for f in findings)
+    assert all("possibly incomplete" in f.evidence["headline"] for f in findings)
+
+
+def test_parse_rows_no_truncation_flag_when_under_the_limit():
+    plugin = WaybackPlugin()
+    rows = [
+        ["original", "timestamp", "statuscode"],
+        ["http://www.example.com/", "20000304021913", "200"],
+    ]
+
+    findings = plugin._parse_rows("example.com", rows)
+
+    assert "truncated" not in findings[0].evidence
+    assert "possibly incomplete" not in findings[0].evidence["headline"]
+
+
 async def test_run_parses_real_shaped_output(monkeypatch):
     async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
         stdout = json.dumps([

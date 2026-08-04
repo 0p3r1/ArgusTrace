@@ -1,6 +1,8 @@
 import json
 
 from argustrace.core.models import Status
+from argustrace.plugins import recherche_entreprises_plugin
+from argustrace.plugins._docker_runner import DockerRunResult
 from argustrace.plugins.recherche_entreprises_plugin import RechercheEntreprisesPlugin
 
 
@@ -174,3 +176,71 @@ def test_to_finding_omits_coordinates_when_siege_has_no_geolocation():
     finding = plugin._to_finding("a", result)
 
     assert "coordinates" not in finding.evidence
+
+
+def test_build_url_includes_page():
+    plugin = RechercheEntreprisesPlugin()
+    url = plugin._build_url("Martin", {"page": 3})
+
+    assert "page=3" in url
+
+
+def test_build_url_uses_default_page_when_absent():
+    plugin = RechercheEntreprisesPlugin()
+    url = plugin._build_url("Martin", {})
+
+    assert "page=1" in url
+
+
+def test_build_url_clamps_page_to_minimum():
+    plugin = RechercheEntreprisesPlugin()
+    url = plugin._build_url("Martin", {"page": 0})
+
+    assert "page=1" in url
+
+
+def test_build_url_ignores_invalid_page_type():
+    plugin = RechercheEntreprisesPlugin()
+    url = plugin._build_url("Martin", {"page": "not-a-number"})
+
+    assert "page=1" in url
+
+
+async def test_run_reports_docker_failure(monkeypatch):
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        return DockerRunResult(ok=False, returncode=None, stdout=b"", stderr=b"", error="docker not available")
+
+    monkeypatch.setattr(recherche_entreprises_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = RechercheEntreprisesPlugin()
+    findings = await plugin.run("carrefour")
+
+    assert findings[0].status == Status.ERROR
+    assert "docker not available" in findings[0].evidence["reason"]
+
+
+async def test_run_reports_nonzero_exit(monkeypatch):
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        return DockerRunResult(ok=True, returncode=1, stdout=b"", stderr=b"boom", error=None)
+
+    monkeypatch.setattr(recherche_entreprises_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = RechercheEntreprisesPlugin()
+    findings = await plugin.run("carrefour")
+
+    assert findings[0].status == Status.ERROR
+    assert "curl failed" in findings[0].evidence["reason"]
+
+
+async def test_run_parses_real_shaped_output(monkeypatch):
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        stdout = json.dumps({"results": [{"siren": "652014051", "nom_complet": "CARREFOUR", "siege": {}, "dirigeants": []}]}).encode()
+        return DockerRunResult(ok=True, returncode=0, stdout=stdout, stderr=b"", error=None)
+
+    monkeypatch.setattr(recherche_entreprises_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = RechercheEntreprisesPlugin()
+    findings = await plugin.run("carrefour")
+
+    assert findings[0].status == Status.FOUND
+    assert findings[0].source == "recherche-entreprises:652014051"

@@ -8,6 +8,12 @@ generic curl image as crt.sh — no API keys, no signup:
   name, and status. The redirect chain occasionally drops the TLS
   connection mid-handshake (observed directly, not assumed) — a couple of
   quick retries clears it, same rationale as crt.sh's flakiness handling.
+  The retry decision reads curl's **HTTP status**, not just whether a body
+  came back: verified live, rdap.org answers a genuine "no record" with a
+  404 and an empty body, but can also return an empty body on a transient
+  5xx — and curl exits 0 either way. Only the 404 is `NOT_FOUND`;
+  everything else is retried and, if it never clears, reported as `ERROR`
+  rather than a confident "no record".
 - **ip-api.com**: approximate city-level geolocation, ISP, and ASN.
 
 Private, loopback, link-local, and other non-routable addresses (RFC 1918,

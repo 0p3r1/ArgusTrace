@@ -42,7 +42,13 @@ class CrtShPlugin:
                 except json.JSONDecodeError:
                     last_error = "crt.sh returned a non-JSON or empty response (it's a flaky free service)"
                 else:
-                    return self._parse_rows(entity, rows)
+                    # crt.sh normally returns a JSON array of cert rows, but
+                    # under load it can return a JSON error object instead
+                    # (still valid JSON) — treat that shape the same as a
+                    # parse failure rather than crashing in _parse_rows.
+                    if isinstance(rows, list):
+                        return self._parse_rows(entity, rows)
+                    last_error = "crt.sh returned an unexpected (non-list) JSON response"
 
             if attempt < MAX_ATTEMPTS:
                 await asyncio.sleep(RETRY_DELAY_S)

@@ -1,9 +1,5 @@
-import ast
-import csv
-import glob
+import json
 import re
-import tempfile
-from pathlib import Path
 
 from argustrace.core.models import Finding, Status
 from argustrace.plugins._docker_runner import run_hardened
@@ -11,6 +7,10 @@ from argustrace.plugins._docker_runner import run_hardened
 IMAGE = "argustrace-holehe:1.61"
 ENTITY_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 RUN_TIMEOUT_S = 60
+
+DEFAULT_TIMEOUT_S = 10
+TIMEOUT_MIN_S = 5
+TIMEOUT_MAX_S = 30
 
 
 class HolehePlugin:
@@ -21,92 +21,77 @@ class HolehePlugin:
         if not ENTITY_PATTERN.match(entity):
             return [self._error(entity, "invalid entity: does not look like an email address")]
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            args = self._build_args(entity, options or {})
+        args = self._build_args(entity, options or {})
+        result = await run_hardened(IMAGE, args, timeout_s=RUN_TIMEOUT_S)
+        if not result.ok:
+            return [self._error(entity, result.error)]
+        if result.returncode != 0:
+            return [self._error(entity, f"holehe run failed: {result.stderr.decode(errors='replace')[:500]}")]
 
-            result = await run_hardened(
-                IMAGE, args, volume=(tmpdir, "/home/holehe"), timeout_s=RUN_TIMEOUT_S,
-            )
-            if not result.ok:
-                return [self._error(entity, result.error)]
+        try:
+            rows = json.loads(result.stdout.decode())
+        except json.JSONDecodeError:
+            return [self._error(entity, "holehe produced no parseable JSON output")]
 
-            # holehe's own --csv handler calls exit("message") on success,
-            # which raises SystemExit(1) — a non-zero code here does not
-            # mean failure, so we check for the output file instead.
-            matches = glob.glob(str(Path(tmpdir) / "holehe_*_results.csv"))
-            if not matches:
-                reason = result.stderr.decode(errors="replace")[:500] or "no CSV output produced"
-                return [self._error(entity, f"holehe run failed: {reason}")]
-
-            return self._parse_csv(entity, Path(matches[0]))
+        return self._parse_rows(entity, rows)
 
     def _build_args(self, entity: str, options: dict) -> list[str]:
-        # Deliberately not passing --timeout: holehe 1.61's argparse stores
-        # an explicit value as a string instead of an int, which makes
-        # every module raise immediately.
-        args = [entity, "--csv"]
+        args = [entity, str(self._resolve_timeout(options))]
         if options.get("no_password_recovery"):
             args.append("-NP")
         return args
 
-    def _parse_csv(self, entity: str, csv_path: Path) -> list[Finding]:
-        findings = []
-        with csv_path.open(newline="", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                if row["rateLimit"] == "True":
-                    status = Status.ERROR
-                elif row["exists"] == "True":
-                    status = Status.FOUND
-                else:
-                    status = Status.NOT_FOUND
-
-                evidence = {
-                    "domain": row["domain"],
-                    "method": row["method"],
-                    "rate_limited": row["rateLimit"],
-                }
-
-                recovery_hint = {
-                    k: v for k, v in {
-                        "email": row.get("emailrecovery"),
-                        "phone": row.get("phoneNumber"),
-                    }.items() if v and v != "None"
-                }
-                if recovery_hint:
-                    evidence["recovery_hint"] = recovery_hint
-
-                profile = self._parse_others(row.get("others"))
-                if profile:
-                    evidence["profile"] = profile
-                    evidence["headline"] = profile.get("FullName") or profile.get("fullname")
-                elif row["domain"] and row["method"]:
-                    evidence["headline"] = f"{row['domain']} · {row['method']}"
-                evidence = {k: v for k, v in evidence.items() if v}
-
-                findings.append(
-                    Finding(
-                        entity=entity,
-                        entity_type="email",
-                        source=f"holehe:{row['name']}",
-                        status=status,
-                        url=f"https://{row['domain']}" if row["domain"] else None,
-                        evidence=evidence,
-                    )
-                )
-        return findings
-
-    def _parse_others(self, raw: str | None) -> dict | None:
-        # holehe's "others" CSV column is a Python dict repr (e.g. modules
-        # that expose a FullName or account-creation date write it via
-        # str(the_dict)), not JSON — ast.literal_eval is the safe way to
-        # read that back.
-        if not raw or raw == "None":
-            return None
+    def _resolve_timeout(self, options: dict) -> int:
         try:
-            parsed = ast.literal_eval(raw)
-        except (ValueError, SyntaxError):
-            return None
-        return parsed if isinstance(parsed, dict) and parsed else None
+            timeout = int(options.get("timeout", DEFAULT_TIMEOUT_S))
+        except (TypeError, ValueError):
+            timeout = DEFAULT_TIMEOUT_S
+        return max(TIMEOUT_MIN_S, min(TIMEOUT_MAX_S, timeout))
+
+    def _parse_rows(self, entity: str, rows: list[dict]) -> list[Finding]:
+        findings = []
+        for row in rows:
+            if row["rateLimit"]:
+                status = Status.ERROR
+            elif row["exists"]:
+                status = Status.FOUND
+            else:
+                status = Status.NOT_FOUND
+
+            evidence = {
+                "domain": row.get("domain"),
+                "method": row.get("method"),
+                "rate_limited": row["rateLimit"],
+            }
+
+            recovery_hint = {
+                k: v for k, v in {
+                    "email": row.get("emailrecovery"),
+                    "phone": row.get("phoneNumber"),
+                }.items() if v
+            }
+            if recovery_hint:
+                evidence["recovery_hint"] = recovery_hint
+
+            profile = row.get("others") if isinstance(row.get("others"), dict) else None
+            if profile:
+                evidence["profile"] = profile
+                evidence["headline"] = profile.get("FullName") or profile.get("fullname")
+            elif row.get("domain") and row.get("method"):
+                evidence["headline"] = f"{row['domain']} · {row['method']}"
+            evidence = {k: v for k, v in evidence.items() if v}
+
+            findings.append(
+                Finding(
+                    entity=entity,
+                    entity_type="email",
+                    source=f"holehe:{row['name']}",
+                    status=status,
+                    url=f"https://{row['domain']}" if row.get("domain") else None,
+                    evidence=evidence,
+                )
+            )
+        return findings
 
     def _error(self, entity: str, reason: str) -> Finding:
         return Finding(

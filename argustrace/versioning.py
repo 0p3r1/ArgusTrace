@@ -97,12 +97,16 @@ async def check_dockerhub(repository: str, pinned: str) -> VersionCheckResult:
 async def check_github_releases(repo: str, pinned: str) -> VersionCheckResult:
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_S, headers=GITHUB_HEADERS) as client:
-            resp = await client.get(f"https://api.github.com/repos/{repo}/releases")
+            resp = await client.get(f"https://api.github.com/repos/{repo}/releases", params={"per_page": 100})
             resp.raise_for_status()
             releases = [r["tag_name"] for r in resp.json() if not r.get("draft")]
             if not releases:
                 # Not every project cuts GitHub Releases; fall back to tags.
-                resp = await client.get(f"https://api.github.com/repos/{repo}/tags")
+                # Without per_page, GitHub defaults to 30 — verified live
+                # against exiftool/exiftool: our pin sat just past that
+                # default page, past every actual release since, producing
+                # a false "unknown" instead of the real "outdated by N".
+                resp = await client.get(f"https://api.github.com/repos/{repo}/tags", params={"per_page": 100})
                 resp.raise_for_status()
                 releases = [t["name"] for t in resp.json()]
     except Exception as e:

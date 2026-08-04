@@ -146,17 +146,24 @@ class TheHarvesterPlugin:
 REPORT_FORMATS = {"xml": {"filename": "report.xml"}}
 
 
-async def generate_report(entity: str, report_format: str) -> bytes:
+async def generate_report(entity: str, report_format: str, plugin: str | None = None) -> bytes:
     if not ENTITY_PATTERN.match(entity):
         raise ValueError("invalid entity: does not look like a domain name")
     spec = REPORT_FORMATS.get(report_format)
     if spec is None:
         raise ValueError(f"unsupported report format for theharvester: {report_format!r}")
 
+    # `plugin` is the exact variant key the results being previewed/downloaded
+    # came from (e.g. "theharvester-broad") — without it, this always re-ran
+    # the fast/single-source scan even after a broad scan, silently handing
+    # back a report that didn't match what the results table showed.
+    sources = BROAD_SOURCES if plugin == "theharvester-broad" else FAST_SOURCES
+    timeout_s = BROAD_RUN_TIMEOUT_S if plugin == "theharvester-broad" else FAST_RUN_TIMEOUT_S
+
     with tempfile.TemporaryDirectory() as tmpdir:
-        args = ["-d", entity, "-b", FAST_SOURCES, "-l", str(DEFAULT_LIMIT), "-f", "/output/report"]
+        args = ["-d", entity, "-b", sources, "-l", str(DEFAULT_LIMIT), "-f", "/output/report"]
         result = await run_hardened(
-            IMAGE, args, volume=(tmpdir, "/output"), env={"HOME": "/tmp"}, timeout_s=FAST_RUN_TIMEOUT_S,
+            IMAGE, args, volume=(tmpdir, "/output"), env={"HOME": "/tmp"}, timeout_s=timeout_s,
         )
         if not result.ok:
             raise ValueError(result.error)

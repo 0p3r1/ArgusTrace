@@ -19,17 +19,24 @@ Note: Holehe's own code treats _any_ exception raised while checking a site
 True` — it's a catch-all, not a precise signal, which is exactly why our
 `ERROR` status exists as a separate bucket from `NOT_FOUND`.
 
-The plugin deliberately never passes `--timeout` to Holehe: in v1.61,
-argparse stores an explicit value as a string instead of an int, which
-makes every single module raise immediately. Omitting the flag keeps the
-(int) default and avoids the bug entirely.
+Like Ignorant, the image doesn't run Holehe's own CLI. Its `maincore()`
+calls `check_update()` on **every** invocation — a live PyPI request that,
+if a newer release exists, shells out to `pip install --upgrade holehe`
+and exits before scanning anything. That means every run phoned home, and
+the day upstream ships 1.62 the pinned image would start failing closed
+until someone noticed. The image instead bakes in a small wrapper
+([`holehe_json.py`](../../docker/holehe/holehe_json.py)) that calls the
+library's own module functions directly and prints JSON — which also
+sidesteps Holehe's `--timeout` argparse bug (v1.61 stores an explicit
+value as a string, making every module raise immediately) and removes the
+need to parse its CSV at all.
 
-Holehe's raw CSV also carries a recovery-email/phone hint and, for a few
-modules, an extracted full name or account-creation date (`others`, a
-Python-dict-repr string, read back with `ast.literal_eval`) — both were
-being silently dropped and are now merged into `evidence` as
-`recovery_hint`/`profile` when present.
+Each result carries a recovery-email/phone hint and, for a few modules, an
+extracted full name or account-creation date (`others`) — merged into
+`evidence` as `recovery_hint`/`profile` when present.
 
-Exposed option: `no_password_recovery` (`-NP`) — skips the 4 modules
+Exposed options: `no_password_recovery` (`-NP`) — skips the 4 modules
 (Adobe, Mail.ru, Odnoklassniki, Samsung) that trigger a real password-reset
-email on the target account, trading a little coverage for a quieter check.
+email on the target account, trading a little coverage for a quieter check
+— and `timeout`, our wrapper's per-site httpx timeout (see above for why
+Holehe's own flag isn't used).

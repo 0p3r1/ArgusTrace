@@ -1,6 +1,8 @@
 import json
 
 from argustrace.core.models import Status
+from argustrace.plugins import ip_plugin
+from argustrace.plugins._docker_runner import DockerRunResult
 from argustrace.plugins.ip_plugin import IPPlugin
 
 
@@ -62,10 +64,13 @@ def test_parse_rdap_headline_falls_back_to_network_name_without_org():
     assert finding.evidence["headline"] == "PRIVATE-ADDRESS-CBLK"
 
 
-def test_parse_rdap_empty_body_is_not_found():
+def test_parse_rdap_empty_body_is_error():
+    # _parse_rdap is only reached once _rdap() already confirmed a 2xx
+    # status — an empty body at that point is an anomaly, not a genuine
+    # "no record" (that's now decided by the real HTTP status in _rdap()).
     plugin = IPPlugin()
     finding = plugin._parse_rdap("8.8.8.8", "")
-    assert finding.status == Status.NOT_FOUND
+    assert finding.status == Status.ERROR
 
 
 def test_parse_rdap_non_json_is_error():
@@ -113,3 +118,92 @@ def test_resolve_sources_filters_to_known_values():
 def test_resolve_sources_falls_back_when_all_invalid():
     plugin = IPPlugin()
     assert plugin._resolve_sources({"sources": ["bogus"]}) == ["rdap", "geolocation"]
+
+
+async def _instant_sleep(_seconds):
+    pass
+
+
+async def test_rdap_real_404_is_not_found(monkeypatch):
+    # A genuine "no RDAP record" is an honest 404 with an empty body —
+    # curl exits 0 either way, so the HTTP status (not just body emptiness)
+    # is what must distinguish this from a transient failure below.
+    monkeypatch.setattr(ip_plugin.asyncio, "sleep", _instant_sleep)
+
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        return DockerRunResult(ok=True, returncode=0, stdout=b"\n404", stderr=b"", error=None)
+
+    monkeypatch.setattr(ip_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = IPPlugin()
+    finding = await plugin._rdap("8.8.8.8")
+
+    assert finding.status == Status.NOT_FOUND
+
+
+async def test_rdap_transient_5xx_with_empty_body_is_error_not_not_found(monkeypatch):
+    # Verified live: rdap.org can return an empty body with curl exit 0 on
+    # a transient upstream error — this used to be indistinguishable from
+    # a real 404 and silently became NOT_FOUND. Retries are exhausted here
+    # (every attempt returns 500), so it must end as ERROR.
+    monkeypatch.setattr(ip_plugin.asyncio, "sleep", _instant_sleep)
+
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        return DockerRunResult(ok=True, returncode=0, stdout=b"\n500", stderr=b"", error=None)
+
+    monkeypatch.setattr(ip_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = IPPlugin()
+    finding = await plugin._rdap("8.8.8.8")
+
+    assert finding.status == Status.ERROR
+    assert "HTTP 500" in finding.evidence["reason"]
+
+
+async def test_rdap_succeeds_after_transient_failure_retry(monkeypatch):
+    monkeypatch.setattr(ip_plugin.asyncio, "sleep", _instant_sleep)
+    attempts = []
+
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        attempts.append(1)
+        if len(attempts) == 1:
+            return DockerRunResult(ok=True, returncode=0, stdout=b"\n503", stderr=b"", error=None)
+        body = json.dumps({"name": "GOOGLE"}).encode()
+        return DockerRunResult(ok=True, returncode=0, stdout=body + b"\n200", stderr=b"", error=None)
+
+    monkeypatch.setattr(ip_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = IPPlugin()
+    finding = await plugin._rdap("8.8.8.8")
+
+    assert len(attempts) == 2
+    assert finding.status == Status.FOUND
+    assert finding.evidence["network_name"] == "GOOGLE"
+
+
+async def test_rdap_docker_failure_is_error(monkeypatch):
+    monkeypatch.setattr(ip_plugin.asyncio, "sleep", _instant_sleep)
+
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        return DockerRunResult(ok=False, returncode=None, stdout=b"", stderr=b"", error="docker not available")
+
+    monkeypatch.setattr(ip_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = IPPlugin()
+    finding = await plugin._rdap("8.8.8.8")
+
+    assert finding.status == Status.ERROR
+    assert "docker not available" in finding.evidence["reason"]
+
+
+async def test_geolocation_docker_failure_is_error(monkeypatch):
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        return DockerRunResult(ok=False, returncode=None, stdout=b"", stderr=b"", error="docker not available")
+
+    monkeypatch.setattr(ip_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = IPPlugin()
+    finding = await plugin._geolocation("8.8.8.8")
+
+    assert finding.status == Status.ERROR
+    assert "docker not available" in finding.evidence["reason"]

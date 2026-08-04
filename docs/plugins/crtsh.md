@@ -18,3 +18,8 @@ repeatedly just testing this plugin. The plugin retries once after a
 short delay before giving up, which noticeably cuts the failure rate;
 if both attempts fail, it still reports `ERROR` honestly rather than
 hiding it or retrying forever.
+
+Under load crt.sh can also answer with a JSON *object* (an error payload)
+where the API normally returns an array. That parses fine as JSON but
+isn't a list of certificates, so it's treated like any other bad response
+— retried, then `ERROR` — instead of being fed to the row parser.

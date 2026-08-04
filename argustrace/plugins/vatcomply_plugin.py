@@ -22,6 +22,16 @@ ENTITY_PATTERN = re.compile(r"^[A-Za-z]{2}[A-Za-z0-9]{2,12}$")
 MAX_ATTEMPTS = 3
 RETRY_DELAY_S = 2
 
+# VIES gateway error codes are short, ALL_CAPS identifiers (e.g.
+# "MS_MAX_CONCURRENT_REQ", "SERVICE_UNAVAILABLE") — genuinely transient,
+# worth retrying. Any other `detail` is a full-sentence message VATComply
+# generates for a real, permanent problem — verified live for two cases a
+# naive "any detail = retry" check used to retry 3 times pointlessly
+# before still correctly failing: "FRAB" -> "Invalid VAT number format.
+# Expected format: ..." and any GB number -> "...VoW service ceased to
+# exist...". Full sentences never match this pattern, so they fail fast.
+TRANSIENT_DETAIL_PATTERN = re.compile(r"^[A-Z_]+$")
+
 
 class VatComplyPlugin:
     name = "vatcomply"
@@ -51,6 +61,10 @@ class VatComplyPlugin:
                     detail = data.get("detail")
                     if detail == "INVALID_INPUT":
                         return [self._error(entity, "invalid entity: not a valid EU VAT number format")]
+                    if detail and not TRANSIENT_DETAIL_PATTERN.match(detail):
+                        # A full-sentence detail is a permanent, non-retryable
+                        # problem, not a transient VIES gateway hiccup.
+                        return [self._error(entity, detail)]
                     if detail:
                         # EU VIES member-state gateway error (overloaded,
                         # unavailable, ...) — transient, worth retrying.

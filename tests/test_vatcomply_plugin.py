@@ -111,6 +111,55 @@ async def test_run_normalizes_spaces_and_case(monkeypatch):
     assert "FR40303265045" in captured["url"]
 
 
+async def test_run_full_sentence_detail_is_error_no_retry(monkeypatch):
+    # Verified live: VATComply returns full-sentence `detail` messages for
+    # real, permanent problems that aren't "INVALID_INPUT" — a per-country
+    # format error ("FRAB") and GB's discontinued VoW service both used to
+    # be misread as transient VIES gateway noise and retried 3 times
+    # pointlessly before still (correctly) ending in ERROR.
+    calls = 0
+
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        nonlocal calls
+        calls += 1
+        detail = "Invalid VAT number format. Expected format: Two-letter country code followed by 8-12 digits or letters."
+        return DockerRunResult(ok=True, returncode=0, stdout=f'{{"detail": "{detail}"}}'.encode(), stderr=b"", error=None)
+
+    monkeypatch.setattr(vatcomply_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = VatComplyPlugin()
+    findings = await plugin.run("FRAB1234567")
+
+    assert findings[0].status == Status.ERROR
+    assert "Invalid VAT number format" in findings[0].evidence["reason"]
+    assert calls == 1  # a real, permanent error shouldn't be retried
+
+
+async def test_run_short_uppercase_detail_is_still_treated_as_transient(monkeypatch):
+    # Guards the distinguishing heuristic itself: short ALL_CAPS codes
+    # (the shape of every known VIES gateway error) must still retry.
+    calls = 0
+
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        nonlocal calls
+        calls += 1
+        if calls < 2:
+            return DockerRunResult(ok=True, returncode=0, stdout=b'{"detail": "SERVICE_UNAVAILABLE"}', stderr=b"", error=None)
+        return DockerRunResult(ok=True, returncode=0, stdout=b'{"valid": true, "name": "ACME", "country_code": "FR"}', stderr=b"", error=None)
+
+    async def instant_sleep(_seconds):
+        pass
+
+    monkeypatch.setattr(vatcomply_plugin, "run_hardened", fake_run_hardened)
+    monkeypatch.setattr(vatcomply_plugin.asyncio, "sleep", instant_sleep)
+
+    plugin = VatComplyPlugin()
+    findings = await plugin.run("FR40303265045")
+
+    assert findings[0].status == Status.FOUND
+    assert calls == 2
+
+
 async def test_run_reports_docker_failure(monkeypatch):
     async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
         return DockerRunResult(ok=True, returncode=1, stdout=b"", stderr=b"boom", error=None)

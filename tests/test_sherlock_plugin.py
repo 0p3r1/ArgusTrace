@@ -2,6 +2,8 @@ import csv
 from pathlib import Path
 
 from argustrace.core.models import Status
+from argustrace.plugins import sherlock_plugin
+from argustrace.plugins._docker_runner import DockerRunResult
 from argustrace.plugins.sherlock_plugin import SherlockPlugin
 
 
@@ -83,3 +85,61 @@ def test_build_args_nsfw_flag():
     plugin = SherlockPlugin(sites=["GitHub"])
     args = plugin._build_args("alice", {"nsfw": True})
     assert "--nsfw" in args
+
+
+async def test_run_reports_docker_failure(monkeypatch):
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        return DockerRunResult(ok=False, returncode=None, stdout=b"", stderr=b"", error="docker not available")
+
+    monkeypatch.setattr(sherlock_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = SherlockPlugin()
+    findings = await plugin.run("alice")
+
+    assert findings[0].status == Status.ERROR
+    assert "docker not available" in findings[0].evidence["reason"]
+
+
+async def test_run_reports_nonzero_exit(monkeypatch):
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        return DockerRunResult(ok=True, returncode=1, stdout=b"", stderr=b"boom", error=None)
+
+    monkeypatch.setattr(sherlock_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = SherlockPlugin()
+    findings = await plugin.run("alice")
+
+    assert findings[0].status == Status.ERROR
+    assert "docker run failed" in findings[0].evidence["reason"]
+
+
+async def test_run_reports_missing_csv_output(monkeypatch):
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        return DockerRunResult(ok=True, returncode=0, stdout=b"", stderr=b"", error=None)
+
+    monkeypatch.setattr(sherlock_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = SherlockPlugin()
+    findings = await plugin.run("alice")
+
+    assert findings[0].status == Status.ERROR
+    assert "no CSV output" in findings[0].evidence["reason"]
+
+
+async def test_run_parses_real_shaped_output(monkeypatch):
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        host_path, _container_path = volume
+        csv_path = Path(host_path) / "alice.csv"
+        with csv_path.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["username", "name", "url_main", "url_user", "exists", "http_status", "response_time_s"])
+            writer.writerow(["alice", "GitHub", "https://github.com/", "https://github.com/alice", "Claimed", "200", "0.1"])
+        return DockerRunResult(ok=True, returncode=0, stdout=b"", stderr=b"", error=None)
+
+    monkeypatch.setattr(sherlock_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = SherlockPlugin(sites=["GitHub"])
+    findings = await plugin.run("alice")
+
+    assert findings[0].status == Status.FOUND
+    assert findings[0].source == "sherlock:GitHub"

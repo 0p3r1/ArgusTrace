@@ -119,10 +119,17 @@ function ResultsSummary({ findings, activeFilter, onToggleFilter }) {
   )
 }
 
-export default function ResultsPanel({ family, entity, findings, error, statusFilter, onToggleStatusFilter, onMinimize, onClose }) {
+export default function ResultsPanel({ family, plugin, entity, findings, error, statusFilter, onToggleStatusFilter, onMinimize, onClose }) {
   const hasDetails = findings?.some((f) => hasMeaningfulEvidence(f.evidence)) ?? false
   const filenameBase = `${family.family}_${entity}`.replace(/[^\w.-]+/g, '_')
   const nativeActions = family.native_reports.filter((r) => r.available && r.kind !== 'info')
+  // plugin identifies which variant produced these results, so the native
+  // report can re-run the same one. Omitted rather than sent as "undefined"
+  // if it's ever missing — the API 404s on an unknown plugin, and falling
+  // back to the family default beats breaking the link outright.
+  const reportUrl = (format) =>
+    `${API_BASE}/api/tools/${family.family}/report?entity=${encodeURIComponent(entity)}&format=${format}` +
+    (plugin ? `&plugin=${encodeURIComponent(plugin)}` : '')
   const [preview, setPreview] = useState(null)
   const [detailFinding, setDetailFinding] = useState(null)
 
@@ -145,7 +152,7 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
       error: null,
     })
     try {
-      const res = await fetch(`${API_BASE}/api/tools/${family.family}/report?entity=${encodeURIComponent(entity)}&format=${r.format}`)
+      const res = await fetch(reportUrl(r.format))
       if (!res.ok) throw new Error(`API returned ${res.status}`)
       const text = await res.text()
       setPreview((prev) => (prev ? { ...prev, content: text, loading: false } : prev))
@@ -200,7 +207,7 @@ export default function ResultsPanel({ family, entity, findings, error, statusFi
                 <span key={r.format} className="split-action">
                   <a
                     className="action-button"
-                    href={`${API_BASE}/api/tools/${family.family}/report?entity=${encodeURIComponent(entity)}&format=${r.format}`}
+                    href={reportUrl(r.format)}
                     download
                     title={r.note}
                   >

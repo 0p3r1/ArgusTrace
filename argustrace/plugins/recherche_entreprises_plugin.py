@@ -12,6 +12,13 @@ DEFAULT_PER_PAGE = 10
 PER_PAGE_MIN = 1
 PER_PAGE_MAX = 25  # the API's own hard cap
 
+DEFAULT_PAGE = 1
+PAGE_MIN = 1
+# The API paginates well beyond per_page's 25-per-request cap (verified
+# live: total_pages=2000 for a broad query with per_page=5) — without this,
+# results were permanently capped at the first page with no way to see more.
+PAGE_MAX = 2000
+
 # Free-text/code filters passed straight through when non-blank — each
 # already accepts a single value or a comma-separated list on the API's
 # side, so no local validation beyond "don't send blank values".
@@ -93,6 +100,12 @@ class RechercheEntreprisesPlugin:
         except (TypeError, ValueError):
             per_page = DEFAULT_PER_PAGE
         params["per_page"] = max(PER_PAGE_MIN, min(PER_PAGE_MAX, per_page))
+
+        try:
+            page = int(options.get("page", DEFAULT_PAGE))
+        except (TypeError, ValueError):
+            page = DEFAULT_PAGE
+        params["page"] = max(PAGE_MIN, min(PAGE_MAX, page))
 
         return f"{BASE_URL}?{urlencode(params)}"
 

@@ -248,6 +248,15 @@ TOOL_FAMILIES = {
                     "less coverage in exchange for a quieter, less detectable check."
                 ),
             },
+            {
+                "name": "timeout", "flag": "--timeout", "type": "int", "required": False,
+                "default": 10, "min": 5, "max": 30,
+                "description": (
+                    "Per-site HTTP timeout in seconds. Holehe's own CLI flag for this is "
+                    "unusable (v1.61 stores it as a string, breaking every module), so this "
+                    "is our wrapper's httpx timeout instead — same approach as Ignorant."
+                ),
+            },
         ],
         "native_reports": [
             {
@@ -509,6 +518,14 @@ TOOL_FAMILIES = {
                 "default": 10, "min": 1, "max": 25,
                 "description": "Results per page (the API's own hard cap is 25).",
             },
+            {
+                "name": "page", "flag": "page", "type": "int", "required": False,
+                "default": 1, "min": 1, "max": 2000,
+                "description": (
+                    "Page number, for queries with more matches than per_page can return "
+                    "in one request (a broad name search can have thousands of matches)."
+                ),
+            },
         ],
         "native_reports": [],
         "version_check": {"method": "none"},
@@ -532,7 +549,11 @@ TOOL_FAMILIES = {
         },
         "options": [],
         "native_reports": [],
-        "version_check": {"method": "none"},
+        # Pinned via apk version pin in docker/exiftool/Dockerfile
+        # (exiftool=12.80-r0), not a digest — exiftool/exiftool has no
+        # GitHub Releases, but does have real, cleanly-ordered version
+        # tags, so the github_releases checker's tag fallback works here.
+        "version_check": {"method": "github_releases", "repo": "exiftool/exiftool", "pinned_version": "12.80"},
         "source_kind": "cli_tool",
         "requires_key": False,
     },

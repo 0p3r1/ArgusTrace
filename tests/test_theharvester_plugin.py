@@ -1,7 +1,11 @@
+from pathlib import Path
+
 import pytest
 
 from argustrace.core.models import Status
-from argustrace.plugins.theharvester_plugin import TheHarvesterPlugin, generate_report
+from argustrace.plugins import theharvester_plugin
+from argustrace.plugins._docker_runner import DockerRunResult
+from argustrace.plugins.theharvester_plugin import BROAD_SOURCES, FAST_SOURCES, TheHarvesterPlugin, generate_report
 
 
 async def test_invalid_entity_returns_error_without_touching_docker():
@@ -21,6 +25,44 @@ async def test_generate_report_rejects_invalid_entity_without_touching_docker():
 async def test_generate_report_rejects_unsupported_format_without_touching_docker():
     with pytest.raises(ValueError, match="unsupported report format"):
         await generate_report("example.com", "json")
+
+
+async def test_generate_report_uses_fast_sources_by_default(monkeypatch):
+    captured = {}
+
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        captured["args"] = args
+        host_path, _container_path = volume
+        (Path(host_path) / "report.xml").write_text("<xml/>")
+        return DockerRunResult(ok=True, returncode=0, stdout=b"", stderr=b"", error=None)
+
+    monkeypatch.setattr(theharvester_plugin, "run_hardened", fake_run_hardened)
+
+    await generate_report("example.com", "xml")
+
+    args = captured["args"]
+    assert args[args.index("-b") + 1] == FAST_SOURCES
+
+
+async def test_generate_report_uses_broad_sources_for_broad_variant(monkeypatch):
+    # Regression: the report used to always regenerate with the fast/
+    # single-source scan even when the results being previewed came from
+    # the broad (4-source) variant — silently mismatched with what the
+    # results table showed. `plugin` threads the actual variant through.
+    captured = {}
+
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        captured["args"] = args
+        host_path, _container_path = volume
+        (Path(host_path) / "report.xml").write_text("<xml/>")
+        return DockerRunResult(ok=True, returncode=0, stdout=b"", stderr=b"", error=None)
+
+    monkeypatch.setattr(theharvester_plugin, "run_hardened", fake_run_hardened)
+
+    await generate_report("example.com", "xml", plugin="theharvester-broad")
+
+    args = captured["args"]
+    assert args[args.index("-b") + 1] == BROAD_SOURCES
 
 
 def test_empty_report_is_not_found():

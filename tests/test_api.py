@@ -41,7 +41,7 @@ def test_get_native_report_link_kind_is_not_downloadable():
 
 
 def test_get_native_report_success(monkeypatch):
-    async def fake_generate_report(entity: str, report_format: str) -> bytes:
+    async def fake_generate_report(entity: str, report_format: str, plugin: str | None = None) -> bytes:
         assert entity == "alice"
         assert report_format == "html"
         return b"<html>fake report</html>"
@@ -56,7 +56,7 @@ def test_get_native_report_success(monkeypatch):
 
 
 def test_get_native_report_generator_raises_value_error_becomes_400(monkeypatch):
-    async def failing_generate_report(entity: str, report_format: str) -> bytes:
+    async def failing_generate_report(entity: str, report_format: str, plugin: str | None = None) -> bytes:
         raise ValueError("invalid entity: nope")
 
     monkeypatch.setitem(registry.NATIVE_REPORT_GENERATORS, "maigret", failing_generate_report)
@@ -64,3 +64,32 @@ def test_get_native_report_generator_raises_value_error_becomes_400(monkeypatch)
     res = client.get("/api/tools/maigret/report", params={"entity": "not valid", "format": "html"})
     assert res.status_code == 400
     assert "invalid entity" in res.json()["detail"]
+
+
+def test_get_native_report_unknown_plugin_is_404():
+    res = client.get(
+        "/api/tools/theharvester/report",
+        params={"entity": "example.com", "format": "xml", "plugin": "bogus-plugin"},
+    )
+    assert res.status_code == 404
+
+
+def test_get_native_report_threads_plugin_variant_to_generator(monkeypatch):
+    # Regression: theHarvester's XML report used to always regenerate with
+    # the fast/single-source scan regardless of which variant the results
+    # being previewed actually came from — the `plugin` query param (the
+    # exact scan variant, e.g. "theharvester-broad") must reach the generator.
+    captured = {}
+
+    async def fake_generate_report(entity: str, report_format: str, plugin: str | None = None) -> bytes:
+        captured["plugin"] = plugin
+        return b"<xml/>"
+
+    monkeypatch.setitem(registry.NATIVE_REPORT_GENERATORS, "theharvester", fake_generate_report)
+
+    res = client.get(
+        "/api/tools/theharvester/report",
+        params={"entity": "example.com", "format": "xml", "plugin": "theharvester-broad"},
+    )
+    assert res.status_code == 200
+    assert captured["plugin"] == "theharvester-broad"

@@ -118,6 +118,25 @@ async def test_check_github_releases_falls_back_to_tags_when_no_releases(_patch_
     assert any(c.endswith("/tags") for c in calls)
 
 
+async def test_check_github_releases_tags_fallback_requests_per_page_100(_patch_client):
+    # Regression: without an explicit per_page, GitHub's tags endpoint
+    # defaults to 30 — verified live against exiftool/exiftool, where our
+    # pinned version sat just past that default page, past every real
+    # release since, producing a false "unknown" instead of "outdated".
+    captured = {}
+
+    def handler(request):
+        if request.url.path.endswith("/releases"):
+            return httpx.Response(200, json=[])
+        captured["per_page"] = request.url.params.get("per_page")
+        return httpx.Response(200, json=[{"name": "v2.0"}, {"name": "v1.0"}])
+
+    _patch_client["handler"] = handler
+    await versioning.check_github_releases("some/repo", "v2.0")
+
+    assert captured["per_page"] == "100"
+
+
 async def test_check_dispatches_none_without_network_call():
     result = await versioning.check("crtsh", {"method": "none"})
     assert result.status == VersionStatus.NOT_APPLICABLE

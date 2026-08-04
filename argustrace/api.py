@@ -152,10 +152,12 @@ async def investigate(req: InvestigateRequest) -> list[Finding]:
 
 
 @app.get("/api/tools/{family}/report")
-async def get_native_report(family: str, entity: str, format: str) -> Response:
+async def get_native_report(family: str, entity: str, format: str, plugin: str | None = None) -> Response:
     info = TOOL_FAMILIES.get(family)
     if info is None:
         raise HTTPException(status_code=404, detail=f"unknown tool family: {family}")
+    if plugin is not None and plugin not in PLUGINS:
+        raise HTTPException(status_code=404, detail=f"unknown plugin: {plugin}")
 
     entry = next(
         (r for r in info.get("native_reports", []) if r["format"] == format and r["kind"] == "download"),
@@ -171,8 +173,12 @@ async def get_native_report(family: str, entity: str, format: str) -> Response:
         raise HTTPException(status_code=500, detail=f"{family!r} has no report generator wired up")
 
     # On-demand only — this re-runs the tool fresh, nothing is cached.
+    # `plugin` is the exact variant the caller's results came from (e.g.
+    # "theharvester-broad" vs "theharvester") — some generators use it to
+    # match the report to the scan actually run instead of always
+    # defaulting to the fast variant's sources.
     try:
-        content = await generator(entity, format)
+        content = await generator(entity, format, plugin)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

@@ -203,7 +203,12 @@ REPORT_FORMATS = {
 }
 
 
-async def generate_report(entity: str, report_format: str) -> bytes:
+async def generate_report(entity: str, report_format: str, plugin: str | None = None) -> bytes:
+    # `plugin` (which variant's results are being previewed, e.g.
+    # "maigret-full") is accepted for a consistent call signature with
+    # other native report generators but deliberately ignored — this report
+    # is always the quick top-15-sites version regardless of variant, see
+    # REPORT_TOP_SITES above.
     if not ENTITY_PATTERN.match(entity):
         raise ValueError("invalid entity: must match " + ENTITY_PATTERN.pattern)
     spec = REPORT_FORMATS.get(report_format)

@@ -1,4 +1,8 @@
+import json
+
 from argustrace.core.models import Status
+from argustrace.plugins import ignorant_plugin
+from argustrace.plugins._docker_runner import DockerRunResult
 from argustrace.plugins.ignorant_plugin import IgnorantPlugin
 
 
@@ -49,3 +53,58 @@ def test_resolve_timeout_clamps_out_of_range_value():
 def test_resolve_timeout_ignores_invalid_type():
     plugin = IgnorantPlugin()
     assert plugin._resolve_timeout({"timeout": "not-a-number"}) == 10
+
+
+async def test_run_reports_docker_failure(monkeypatch):
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        return DockerRunResult(ok=False, returncode=None, stdout=b"", stderr=b"", error="docker not available")
+
+    monkeypatch.setattr(ignorant_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = IgnorantPlugin()
+    findings = await plugin.run("+16502530000")
+
+    assert findings[0].status == Status.ERROR
+    assert "docker not available" in findings[0].evidence["reason"]
+
+
+async def test_run_reports_nonzero_exit(monkeypatch):
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        return DockerRunResult(ok=True, returncode=1, stdout=b"", stderr=b"boom", error=None)
+
+    monkeypatch.setattr(ignorant_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = IgnorantPlugin()
+    findings = await plugin.run("+16502530000")
+
+    assert findings[0].status == Status.ERROR
+    assert "docker run failed" in findings[0].evidence["reason"]
+
+
+async def test_run_reports_unparseable_json(monkeypatch):
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        return DockerRunResult(ok=True, returncode=0, stdout=b"not json", stderr=b"", error=None)
+
+    monkeypatch.setattr(ignorant_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = IgnorantPlugin()
+    findings = await plugin.run("+16502530000")
+
+    assert findings[0].status == Status.ERROR
+    assert "no parseable JSON" in findings[0].evidence["reason"]
+
+
+async def test_run_parses_real_shaped_output(monkeypatch):
+    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
+        stdout = json.dumps([
+            {"name": "amazon", "domain": "amazon.com", "method": "login", "rateLimit": False, "exists": True},
+        ]).encode()
+        return DockerRunResult(ok=True, returncode=0, stdout=stdout, stderr=b"", error=None)
+
+    monkeypatch.setattr(ignorant_plugin, "run_hardened", fake_run_hardened)
+
+    plugin = IgnorantPlugin()
+    findings = await plugin.run("+16502530000")
+
+    assert findings[0].status == Status.FOUND
+    assert findings[0].source == "ignorant:amazon"

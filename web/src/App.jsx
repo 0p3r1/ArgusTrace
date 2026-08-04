@@ -103,9 +103,9 @@ function App() {
       })
       if (!res.ok) throw new Error(`API returned ${res.status}`)
       const findings = await res.json()
-      setRunResults((prev) => [...prev, { id, family, entity: investigatedEntity, findings, error: null, statusFilter: null }])
+      setRunResults((prev) => [...prev, { id, family, plugin, entity: investigatedEntity, findings, error: null, statusFilter: null }])
     } catch (err) {
-      setRunResults((prev) => [...prev, { id, family, entity: investigatedEntity, findings: null, error: err.message, statusFilter: null }])
+      setRunResults((prev) => [...prev, { id, family, plugin, entity: investigatedEntity, findings: null, error: err.message, statusFilter: null }])
     } finally {
       setLoading(false)
       setActiveResultId(id)
@@ -144,6 +144,7 @@ function App() {
       {activeResult && (
         <ResultsPanel
           family={activeResult.family}
+          plugin={activeResult.plugin}
           entity={activeResult.entity}
           findings={activeResult.findings}
           error={activeResult.error}

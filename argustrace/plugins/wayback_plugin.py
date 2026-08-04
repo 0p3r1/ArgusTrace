@@ -53,8 +53,15 @@ class WaybackPlugin:
             )]
 
         # First row is the CDX header (["original", "timestamp", "statuscode"]).
+        # Getting back exactly ROW_LIMIT data rows means the real result set
+        # may have been larger and got cut off by our own `limit` param —
+        # surfaced below instead of silently under-reporting counts as if
+        # the fetch were complete.
+        data_rows = rows[1:]
+        truncated = len(data_rows) >= ROW_LIMIT
+
         hosts: dict[str, dict] = {}
-        for original, timestamp, statuscode in rows[1:]:
+        for original, timestamp, statuscode in data_rows:
             host = urlparse(original).hostname
             if not host:
                 continue
@@ -69,17 +76,25 @@ class WaybackPlugin:
         for host, data in sorted(hosts.items()):
             first_date = self._format_timestamp(data["first"])
             last_date = self._format_timestamp(data["last"])
+            headline = f"{data['count']} snapshot{'s' if data['count'] != 1 else ''} · {first_date} → {last_date}"
+            evidence = {
+                "host": host,
+                "first_archived": first_date,
+                "last_archived": last_date,
+                "snapshot_count": data["count"],
+            }
+            if truncated:
+                evidence["truncated"] = (
+                    f"results capped at {ROW_LIMIT} rows — this domain may have more "
+                    "archived hosts/snapshots than shown, counts here may be incomplete"
+                )
+                headline += " (possibly incomplete — result cap reached)"
+            evidence["headline"] = headline
             findings.append(Finding(
                 entity=entity, entity_type="domain", source=f"wayback:{host}",
                 status=Status.FOUND,
                 url=f"https://web.archive.org/web/{data['last']}/{data['example']}",
-                evidence={
-                    "host": host,
-                    "first_archived": first_date,
-                    "last_archived": last_date,
-                    "snapshot_count": data["count"],
-                    "headline": f"{data['count']} snapshot{'s' if data['count'] != 1 else ''} · {first_date} → {last_date}",
-                },
+                evidence=evidence,
             ))
         return findings
 

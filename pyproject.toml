@@ -3,6 +3,8 @@ name = "argustrace"
 version = "0.3.0"
 description = "Framework OSINT modulaire"
 requires-python = ">=3.11"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 dependencies = [
     "fastapi>=0.141.1",
     "httpx>=0.28.1",

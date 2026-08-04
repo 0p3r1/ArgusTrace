@@ -4,7 +4,7 @@
 ![Managed with uv](https://img.shields.io/badge/managed%20with-uv-de5fe9)
 ![Tests: pytest](https://img.shields.io/badge/tests-pytest-0a9edc)
 ![Status: active](https://img.shields.io/badge/status-active-brightgreen)
-![License: TBD](https://img.shields.io/badge/license-TBD-lightgrey)
+![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)
 
 A modular OSINT framework. One shared plugin registry (`TOOL_FAMILIES`)
 drives both a CLI and a web app (FastAPI + React) against real OSINT tools,
@@ -330,3 +330,32 @@ generators mocked) — none of it needs Docker or network access. Actually
 running these tools, their native report generation, and live version
 checks against real targets is exercised manually, not in the automated
 suite.
+
+## License
+
+ArgusTrace is licensed under the **GNU GPL v3.0 or later** — see
+[LICENSE](LICENSE).
+
+GPL was chosen deliberately over a permissive license. ArgusTrace's own
+dependencies are all permissive (MIT/BSD/Apache), and every wrapped tool
+runs as a separate process inside its own container, so copyleft wouldn't
+have been forced on this code. But three of the container wrappers
+(`docker/holehe/holehe_json.py`, `docker/ignorant/ignorant_json.py`,
+`docker/toutatis/toutatis_json.py`) import their GPL-3.0 upstream library
+directly rather than shelling out to it, which makes them derivative
+works. Licensing the whole project GPL-3.0 removes that ambiguity, and
+matches the ecosystem this tool lives in.
+
+The tools ArgusTrace orchestrates keep their own licenses — they're
+downloaded or built into their own images, never vendored into this
+repository:
+
+| Tool                                        | License      |
+| ------------------------------------------- | ------------ |
+| Sherlock, Maigret, Recherche d'entreprises  | MIT          |
+| Holehe, Ignorant, Toutatis, exiftool        | GPL-3.0      |
+| theHarvester                                | GPL-2.0-only |
+
+The remaining sources (crt.sh, Wayback Machine, VATComply, RDAP,
+ip-api.com, genderize/agify/nationalize) are public web APIs, not
+distributed code — each is subject to its own terms of use.

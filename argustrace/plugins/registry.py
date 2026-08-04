@@ -549,11 +549,11 @@ TOOL_FAMILIES = {
         },
         "options": [],
         "native_reports": [],
-        # Pinned via apk version pin in docker/exiftool/Dockerfile
-        # (exiftool=12.80-r0), not a digest — exiftool/exiftool has no
+        # Pinned by git tag in docker/exiftool/Dockerfile (--branch 13.59);
+        # bumping one must bump the other. exiftool/exiftool publishes no
         # GitHub Releases, but does have real, cleanly-ordered version
         # tags, so the github_releases checker's tag fallback works here.
-        "version_check": {"method": "github_releases", "repo": "exiftool/exiftool", "pinned_version": "12.80"},
+        "version_check": {"method": "github_releases", "repo": "exiftool/exiftool", "pinned_version": "13.59"},
         "source_kind": "cli_tool",
         "requires_key": False,
     },

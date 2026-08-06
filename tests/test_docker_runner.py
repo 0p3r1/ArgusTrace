@@ -10,6 +10,8 @@ are about the argv that would have been executed.
 """
 
 import asyncio
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -85,19 +87,59 @@ async def test_optional_isolation_knobs_are_absent_by_default(spy_exec):
     assert not any(c.startswith("--network") for c in cmd)
 
 
-async def test_volume_env_and_network_are_passed_when_given(spy_exec):
+async def test_volume_and_network_are_passed_when_given(spy_exec):
     captured = spy_exec()
     await run_hardened(
         "img", [], timeout_s=10,
         volume=("/host/dir", "/output"),
-        env={"HOME": "/tmp"},
         network="none",
     )
 
     cmd = captured["cmd"]
     assert cmd[cmd.index("-v") + 1] == "/host/dir:/output"
-    assert cmd[cmd.index("-e") + 1] == "HOME=/tmp"
     assert "--network=none" in cmd
+
+
+async def test_environment_is_passed_by_file_never_on_the_command_line(monkeypatch):
+    """Toutatis' session cookie goes through here.
+
+    `-e KEY=value` puts the value in the host `docker run` argv, where any
+    local user can read it out of `ps` for the container's lifetime. An
+    env-file is read by docker itself and never reaches a process listing.
+    """
+    seen = {}
+
+    async def _fake_exec(*cmd, **kwargs):
+        seen["cmd"] = list(cmd)
+        env_file = Path(cmd[cmd.index("--env-file") + 1])
+        seen["env_file_contents"] = env_file.read_text()
+        seen["env_file_mode"] = env_file.stat().st_mode & 0o777
+        return FakeProcess()
+
+    monkeypatch.setattr(_docker_runner.asyncio, "create_subprocess_exec", _fake_exec)
+    await run_hardened("img", [], timeout_s=10, env={"IG_SESSIONID": "s3cret-cookie"})
+
+    assert "-e" not in seen["cmd"]
+    assert not any("s3cret-cookie" in part for part in seen["cmd"])
+    assert seen["env_file_contents"] == "IG_SESSIONID=s3cret-cookie\n"
+    assert seen["env_file_mode"] == 0o600
+
+
+async def test_environment_value_with_a_newline_is_rejected(spy_exec):
+    """One KEY=value per line, so an embedded newline would inject a second
+    variable into the container."""
+    spy_exec()
+    result = await run_hardened("img", [], timeout_s=10, env={"K": "a\nEVIL=1"})
+
+    assert result.ok is False
+    assert "newline" in result.error
+
+
+async def test_no_env_file_when_no_environment_is_given(spy_exec):
+    captured = spy_exec()
+    await run_hardened("img", [], timeout_s=10)
+
+    assert "--env-file" not in captured["cmd"]
 
 
 async def test_missing_docker_is_reported_as_not_ok(spy_exec):
@@ -123,6 +165,49 @@ async def test_timeout_is_reported_as_not_ok_and_kills_the_client(spy_exec):
     assert process.killed is True
 
 
+async def test_run_records_a_container_id_so_it_can_be_reaped(spy_exec):
+    captured = spy_exec()
+    await run_hardened("img", [], timeout_s=10)
+
+    assert "--cidfile" in captured["cmd"]
+
+
+async def test_timeout_kills_the_container_not_only_the_docker_client(monkeypatch):
+    """Killing the `docker run` client leaves the container running.
+
+    The daemon carries the container through to completion, so before this a
+    timed-out scan kept burning CPU and network for minutes after the plugin
+    had already reported failure.
+    """
+    commands = []
+    hung = FakeProcess(hang=True)
+
+    async def _fake_exec(*cmd, **kwargs):
+        commands.append(list(cmd))
+        if cmd[:2] == ("docker", "run"):
+            # Stand in for docker recording the id it just started.
+            Path(cmd[cmd.index("--cidfile") + 1]).write_text("deadbeefcafe\n")
+            return hung
+        return FakeProcess()
+
+    monkeypatch.setattr(_docker_runner.asyncio, "create_subprocess_exec", _fake_exec)
+    result = await run_hardened("img", [], timeout_s=0)
+
+    assert result.ok is False
+    kills = [c for c in commands if c[:2] == ["docker", "kill"]]
+    assert kills == [["docker", "kill", "deadbeefcafe"]]
+    assert hung.killed is True
+
+
+async def test_timeout_before_the_container_started_is_survivable(spy_exec):
+    """No cidfile written means docker never got as far as a container."""
+    spy_exec(process=FakeProcess(hang=True))
+    result = await run_hardened("img", [], timeout_s=0)
+
+    assert result.ok is False
+    assert "timed out" in result.error
+
+
 async def test_successful_run_returns_streams_and_returncode(spy_exec):
     spy_exec(process=FakeProcess(stdout=b"out", stderr=b"err", returncode=0))
     result = await run_hardened("img", [], timeout_s=10)
@@ -132,6 +217,33 @@ async def test_successful_run_returns_streams_and_returncode(spy_exec):
     assert result.stdout == b"out"
     assert result.stderr == b"err"
     assert result.error is None
+
+
+async def test_concurrent_runs_are_capped(monkeypatch):
+    """Every container is allowed 512 MB, so without a ceiling N simultaneous
+    requests means N x 512 MB and N full scans competing for the network."""
+    monkeypatch.setattr(
+        _docker_runner, "SETTINGS", replace(_docker_runner.SETTINGS, max_concurrent_runs=2),
+    )
+    _docker_runner._slots_by_loop.clear()
+
+    state = {"live": 0, "peak": 0}
+
+    class CountingProcess(FakeProcess):
+        async def communicate(self):
+            state["live"] += 1
+            state["peak"] = max(state["peak"], state["live"])
+            await asyncio.sleep(0.01)  # hold the slot long enough to overlap
+            state["live"] -= 1
+            return b"", b""
+
+    async def _fake_exec(*cmd, **kwargs):
+        return CountingProcess()
+
+    monkeypatch.setattr(_docker_runner.asyncio, "create_subprocess_exec", _fake_exec)
+    await asyncio.gather(*(run_hardened("img", [], timeout_s=10) for _ in range(6)))
+
+    assert state["peak"] <= 2, f"{state['peak']} containers ran at once, cap is 2"
 
 
 async def test_nonzero_exit_still_counts_as_a_completed_run(spy_exec):

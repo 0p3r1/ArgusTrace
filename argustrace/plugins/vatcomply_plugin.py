@@ -7,7 +7,9 @@ from argustrace.core.models import Finding, Status
 from argustrace.plugins._docker_runner import run_hardened
 
 IMAGE = "argustrace-curl:1.0"  # generic curl image, shared with other simple HTTP-API plugins
-RUN_TIMEOUT_S = 20
+# Above the shared curl image's own --max-time (25s) plus startup — see
+# name_plugin.py for the rationale; asserted in test_registry_consistency.py.
+RUN_TIMEOUT_S = 35
 
 # EU VAT numbers: 2-letter country code + up to 12 alphanumeric chars —
 # actual format varies a lot per country, so this is deliberately loose;

@@ -26,7 +26,42 @@ packages = ["argustrace"]
 dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
+    "ruff>=0.14.0",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# Correctness and security rules, not formatting: F catches real bugs
+# (unused/undefined names), B catches likely mistakes, S is bandit's security
+# lint — which matters for a tool that shells out to Docker and fetches
+# attacker-influenced URLs. E501 stays off deliberately: the long lines are
+# almost all human-written option descriptions in registry.py that read worse
+# wrapped, and reformatting them would bury real changes in noise.
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = [
+    "E501",
+    # S108 flags "/tmp" as an insecure host temp path. Every occurrence here
+    # is a path *inside* a single-use hardened container — `--tmpfs /tmp` is
+    # itself part of the sandbox, and HOME=/tmp is what lets Maigret and
+    # theHarvester start under `--read-only`. Nothing touches the host's /tmp.
+    "S108",
+    # B008 forbids function calls in argument defaults, but that is the
+    # required idiom for Typer's `typer.Option(...)` and FastAPI's
+    # `Header(...)`/`Depends(...)`.
+    "B008",
+    # UP042 wants `StrEnum` instead of `(str, Enum)`. Declined: StrEnum
+    # changes what `str(Status.FOUND)` returns, and `Status` is a documented
+    # core invariant consumed by the API, the CLI and the frontend. Not worth
+    # a behavioural change for a stylistic gain.
+    "UP042",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Asserts are the entire point of a test file.
+"tests/*" = ["S101"]

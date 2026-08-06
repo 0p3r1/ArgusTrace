@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from argustrace.core.models import Finding, Status
 
@@ -17,7 +17,7 @@ def test_finding_defaults():
     assert finding.url is None
     assert finding.evidence == {}
     assert isinstance(finding.timestamp, datetime)
-    assert finding.timestamp.tzinfo == timezone.utc
+    assert finding.timestamp.tzinfo == UTC
 
 
 def test_finding_evidence_defaults_are_independent():

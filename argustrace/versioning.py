@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 import httpx
@@ -31,7 +31,7 @@ class VersionCheckResult:
 
 
 def _classify(pinned: str, releases_newest_first: list[str]) -> VersionCheckResult:
-    checked_at = datetime.now(timezone.utc)
+    checked_at = datetime.now(UTC)
     latest = releases_newest_first[0] if releases_newest_first else None
 
     if pinned not in releases_newest_first:
@@ -56,7 +56,7 @@ def _classify(pinned: str, releases_newest_first: list[str]) -> VersionCheckResu
 
 def _unknown(pinned: str, detail: str) -> VersionCheckResult:
     return VersionCheckResult(
-        VersionStatus.UNKNOWN, pinned=pinned, checked_at=datetime.now(timezone.utc), detail=detail,
+        VersionStatus.UNKNOWN, pinned=pinned, checked_at=datetime.now(UTC), detail=detail,
     )
 
 

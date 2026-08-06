@@ -7,7 +7,11 @@ from argustrace.core.models import Finding, Status
 from argustrace.plugins._docker_runner import run_hardened
 
 IMAGE = "argustrace-curl:1.0"  # generic curl image, shared with other simple HTTP-API plugins
-RUN_TIMEOUT_S = 20
+# Must stay above the shared curl image's own --max-time (25s) plus container
+# startup, so curl aborts with a clean error instead of the outer docker
+# timeout killing the container mid-request. Asserted in
+# tests/test_registry_consistency.py.
+RUN_TIMEOUT_S = 35
 
 GENDERIZE_URL = "https://api.genderize.io/?name={name}"
 AGIFY_URL = "https://api.agify.io/?name={name}"

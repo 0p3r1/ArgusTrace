@@ -118,7 +118,6 @@ def test_prepare_upload_writes_file_for_valid_jpeg(tmp_path):
 
 
 def test_data_uri_pattern_rejects_non_data_uri():
-    plugin = ExifPlugin()
     assert DATA_URI_PATTERN.match("https://example.com/a.jpg") is None
 
 

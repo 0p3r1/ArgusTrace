@@ -5,7 +5,9 @@ from argustrace.core.models import Finding, Status
 from argustrace.plugins._docker_runner import run_hardened
 
 IMAGE = "argustrace-curl:1.0"
-RUN_TIMEOUT_S = 25
+# Above the shared curl image's own --max-time (25s) plus startup — see
+# name_plugin.py for the rationale; asserted in test_registry_consistency.py.
+RUN_TIMEOUT_S = 35
 BASE_URL = "https://recherche-entreprises.api.gouv.fr/search"
 
 DEFAULT_PER_PAGE = 10

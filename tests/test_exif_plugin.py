@@ -49,10 +49,65 @@ async def test_localhost_url_is_rejected_as_ssrf_risk():
 
 async def test_ftp_scheme_is_rejected():
     plugin = ExifPlugin()
-    error = await plugin._validate_url("ftp://example.com/image.jpg")
+    error, resolve_spec = await plugin._validate_url("ftp://example.com/image.jpg")
 
     assert error is not None
     assert "not a valid http(s) URL" in error
+    assert resolve_spec is None
+
+
+async def test_validated_url_returns_a_pin_for_the_address_it_checked():
+    """The container must not resolve the hostname a second time.
+
+    Validating host-side and then handing curl a *hostname* leaves the guard
+    defeatable by DNS rebinding: a short-TTL record can answer with a public
+    address for our lookup and an internal one for curl's. The returned
+    host:port:ip pin removes the second resolution entirely.
+    """
+    plugin = ExifPlugin()
+    error, resolve_spec = await plugin._validate_url("https://example.com/a.jpg")
+
+    assert error is None
+    # host:port:address — split from the left, since an IPv6 address is
+    # bracketed but still full of colons.
+    host, port, address = resolve_spec.split(":", 2)
+    assert host == "example.com"
+    assert port == "443"
+    assert address  # whatever example.com resolves to, it is pinned explicitly
+
+
+async def test_ip_literal_host_needs_no_pin():
+    """There is no DNS lookup to rebind when the URL already carries an
+    address, and a bracketed IPv6 literal would make the pin ambiguous."""
+    plugin = ExifPlugin()
+    error, resolve_spec = await plugin._validate_url("https://1.1.1.1/a.jpg")
+
+    assert error is None
+    assert resolve_spec == ""
+
+
+async def test_explicit_port_is_carried_into_the_pin():
+    plugin = ExifPlugin()
+    error, resolve_spec = await plugin._validate_url("http://example.com:8080/a.jpg")
+
+    assert error is None
+    assert resolve_spec.startswith("example.com:8080:")
+
+
+async def test_run_passes_the_resolve_pin_to_the_container(monkeypatch):
+    calls = []
+
+    async def fake_run_hardened(image, args, timeout_s, **kwargs):
+        calls.append(args)
+        return DockerRunResult(ok=True, returncode=0, stdout=b"[]", stderr=b"", error=None)
+
+    monkeypatch.setattr(exif_plugin, "run_hardened", fake_run_hardened)
+    await ExifPlugin().run("https://example.com/a.jpg")
+
+    args = calls[0]
+    assert args[0] == "--url"
+    assert args[1] == "https://example.com/a.jpg"
+    assert args[2].startswith("example.com:443:")
 
 
 async def test_unresolvable_host_is_error():
@@ -105,6 +160,47 @@ def test_prepare_upload_rejects_oversized_payload(tmp_path):
 
     assert error is not None
     assert "too large" in error
+
+
+def test_oversized_payload_is_rejected_before_being_decoded(tmp_path, monkeypatch):
+    """Decoding to find out how big it is materialises the whole payload in
+    memory, which is exactly what the limit exists to prevent."""
+    plugin = ExifPlugin()
+    match = DATA_URI_PATTERN.match(_data_uri("image/jpeg", b"0" * (MAX_BYTES + 1)))
+
+    def explode(*_args, **_kwargs):
+        raise AssertionError("payload was decoded before its size was checked")
+
+    monkeypatch.setattr(exif_plugin.base64, "b64decode", explode)
+    error = plugin._prepare_upload(str(tmp_path), match)
+
+    assert error is not None
+    assert "too large" in error
+
+
+async def test_upload_findings_do_not_echo_the_data_uri_back(monkeypatch):
+    """Repeating the submitted data URI in every Finding turned a 100 MB
+    upload into a ~133 MB response."""
+    async def fake_run_hardened(image, args, timeout_s, **kwargs):
+        return DockerRunResult(ok=True, returncode=0, stdout=b"[]", stderr=b"", error=None)
+
+    monkeypatch.setattr(exif_plugin, "run_hardened", fake_run_hardened)
+    data_uri = _data_uri("image/jpeg", TINY_JPEG)
+    findings = await ExifPlugin().run(data_uri)
+
+    assert findings, "expected a finding"
+    for finding in findings:
+        assert finding.entity != data_uri
+        assert "base64" not in finding.entity
+        assert finding.entity.startswith("upload:")
+        assert "image/jpeg" in finding.entity
+
+
+async def test_overlong_plain_entity_is_truncated_in_findings(monkeypatch):
+    findings = await ExifPlugin().run("x" * 5000)
+
+    assert findings[0].status == Status.ERROR
+    assert len(findings[0].entity) <= exif_plugin.MAX_LABEL_CHARS + 1
 
 
 def test_prepare_upload_writes_file_for_valid_jpeg(tmp_path):

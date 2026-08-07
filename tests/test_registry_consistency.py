@@ -123,15 +123,26 @@ def _curl_image_max_time() -> int:
 
 
 def _curl_backed_plugin_modules():
+    """Plugin modules whose requests run through the shared curl image.
+
+    Detected two ways: a module that calls `fetch_json` (which defaults to
+    that image), or one still declaring the image directly. Both forms are
+    picked up so the check keeps holding as plugins move onto the helper.
+    """
     import importlib
     import pkgutil
 
     import argustrace.plugins as plugins_pkg
+    from argustrace.plugins import _common
 
     for module_info in pkgutil.iter_modules(plugins_pkg.__path__):
         module = importlib.import_module(f"argustrace.plugins.{module_info.name}")
+        if module is _common:
+            continue
+        uses_helper = getattr(module, "fetch_json", None) is _common.fetch_json
         image = getattr(module, "IMAGE", "")
-        if isinstance(image, str) and image.startswith("argustrace-curl"):
+        declares_image = isinstance(image, str) and image.startswith("argustrace-curl")
+        if uses_helper or declares_image:
             yield module
 
 

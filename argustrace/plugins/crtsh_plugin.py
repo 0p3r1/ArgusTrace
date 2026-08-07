@@ -1,14 +1,12 @@
-import asyncio
-import json
 import re
 from urllib.parse import quote
 
 from argustrace.core.models import Finding, Status
-from argustrace.plugins._docker_runner import run_hardened
-from argustrace.settings import SETTINGS
+from argustrace.plugins._common import DOMAIN_PATTERN_SOURCE, error_finding, fetch_json
 
-IMAGE = SETTINGS.curl_image  # shared "fetch a JSON URL" image
-ENTITY_PATTERN = re.compile(r"^(?=.{1,253}$)([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$")
+ENTITY_PATTERN = re.compile(DOMAIN_PATTERN_SOURCE)
+# Must stay above the shared curl image's own --max-time plus container
+# startup; asserted in tests/test_registry_consistency.py.
 RUN_TIMEOUT_S = 35
 
 # crt.sh is a free, community-run service that's frequently overloaded
@@ -17,6 +15,9 @@ RUN_TIMEOUT_S = 35
 # genuine, persistent failure.
 MAX_ATTEMPTS = 2
 RETRY_DELAY_S = 2
+
+ENTITY_TYPE = "domain"
+SOURCE = "crt.sh"
 
 
 class CrtShPlugin:
@@ -27,42 +28,29 @@ class CrtShPlugin:
         if not ENTITY_PATTERN.match(entity):
             return [self._error(entity, "invalid entity: does not look like a domain name")]
 
-        url = f"https://crt.sh/?q={quote(entity)}&output=json"
+        # expect=list matters: under load crt.sh answers with a JSON error
+        # *object* where the API normally returns an array, which used to
+        # reach the row parser and crash it.
+        fetched = await fetch_json(
+            f"https://crt.sh/?q={quote(entity)}&output=json",
+            timeout_s=RUN_TIMEOUT_S,
+            describe="crt.sh (a flaky, community-run free service)",
+            attempts=MAX_ATTEMPTS,
+            delay_s=RETRY_DELAY_S,
+            expect=list,
+        )
+        if fetched.error:
+            return [self._error(entity, fetched.error)]
 
-        last_error = "unknown error"
-        for attempt in range(1, MAX_ATTEMPTS + 1):
-            result = await run_hardened(IMAGE, [url], timeout_s=RUN_TIMEOUT_S)
-
-            if not result.ok:
-                last_error = result.error
-            elif result.returncode != 0:
-                last_error = f"curl failed: {result.stderr.decode(errors='replace')[:300]}"
-            else:
-                try:
-                    rows = json.loads(result.stdout.decode())
-                except json.JSONDecodeError:
-                    last_error = "crt.sh returned a non-JSON or empty response (it's a flaky free service)"
-                else:
-                    # crt.sh normally returns a JSON array of cert rows, but
-                    # under load it can return a JSON error object instead
-                    # (still valid JSON) — treat that shape the same as a
-                    # parse failure rather than crashing in _parse_rows.
-                    if isinstance(rows, list):
-                        return self._parse_rows(entity, rows)
-                    last_error = "crt.sh returned an unexpected (non-list) JSON response"
-
-            if attempt < MAX_ATTEMPTS:
-                await asyncio.sleep(RETRY_DELAY_S)
-
-        return [self._error(entity, f"{last_error} (after {MAX_ATTEMPTS} attempts)")]
+        return self._parse_rows(entity, fetched.data)
 
     def _parse_rows(self, entity: str, rows: list[dict]) -> list[Finding]:
         if not rows:
             return [
                 Finding(
                     entity=entity,
-                    entity_type="domain",
-                    source="crt.sh",
+                    entity_type=ENTITY_TYPE,
+                    source=SOURCE,
                     status=Status.NOT_FOUND,
                     evidence={"reason": "no certificates found in Certificate Transparency logs"},
                 )
@@ -86,8 +74,8 @@ class CrtShPlugin:
                 findings.append(
                     Finding(
                         entity=entity,
-                        entity_type="domain",
-                        source=f"crt.sh:{name}",
+                        entity_type=ENTITY_TYPE,
+                        source=f"{SOURCE}:{name}",
                         status=Status.FOUND,
                         url=f"https://crt.sh/?id={row['id']}",
                         evidence={
@@ -111,10 +99,4 @@ class CrtShPlugin:
         return match.group(1).strip() if match else issuer_name
 
     def _error(self, entity: str, reason: str) -> Finding:
-        return Finding(
-            entity=entity,
-            entity_type="domain",
-            source="crt.sh",
-            status=Status.ERROR,
-            evidence={"reason": reason},
-        )
+        return error_finding(entity, entity_type=ENTITY_TYPE, source=SOURCE, reason=reason)

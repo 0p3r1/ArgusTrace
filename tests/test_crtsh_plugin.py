@@ -1,6 +1,5 @@
 from argustrace.core.models import Status
-from argustrace.plugins import crtsh_plugin
-from argustrace.plugins._docker_runner import DockerRunResult
+from argustrace.plugins import _common
 from argustrace.plugins.crtsh_plugin import CrtShPlugin
 
 
@@ -76,53 +75,40 @@ async def _instant_sleep(_seconds):
     pass
 
 
-async def test_run_reports_docker_failure(monkeypatch):
-    monkeypatch.setattr(crtsh_plugin.asyncio, "sleep", _instant_sleep)
+# The retry/parse ladder now lives in _common.fetch_json, so these patch there
+# rather than in the plugin — the behaviour under test is unchanged.
+async def test_run_reports_docker_failure(monkeypatch, fake_docker, docker_result):
+    monkeypatch.setattr(_common.asyncio, "sleep", _instant_sleep)
+    fake_docker(_common, docker_result(ok=False, returncode=None, error="docker not available"))
 
-    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
-        return DockerRunResult(ok=False, returncode=None, stdout=b"", stderr=b"", error="docker not available")
-
-    monkeypatch.setattr(crtsh_plugin, "run_hardened", fake_run_hardened)
-
-    plugin = CrtShPlugin()
-    findings = await plugin.run("example.com")
+    findings = await CrtShPlugin().run("example.com")
 
     assert findings[0].status == Status.ERROR
     assert "docker not available" in findings[0].evidence["reason"]
 
 
-async def test_run_treats_non_list_json_as_failure_not_a_crash(monkeypatch):
+async def test_run_treats_non_list_json_as_failure_not_a_crash(monkeypatch, fake_docker, docker_result):
     # crt.sh normally returns a JSON array, but under load can return a
     # JSON *object* instead (still valid JSON) — this used to crash
     # unhandled inside _parse_rows instead of retrying/failing cleanly.
-    monkeypatch.setattr(crtsh_plugin.asyncio, "sleep", _instant_sleep)
+    monkeypatch.setattr(_common.asyncio, "sleep", _instant_sleep)
+    fake_docker(_common, docker_result(b'{"error": "too many requests"}'))
 
-    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
-        return DockerRunResult(ok=True, returncode=0, stdout=b'{"error": "too many requests"}', stderr=b"", error=None)
-
-    monkeypatch.setattr(crtsh_plugin, "run_hardened", fake_run_hardened)
-
-    plugin = CrtShPlugin()
-    findings = await plugin.run("example.com")
+    findings = await CrtShPlugin().run("example.com")
 
     assert findings[0].status == Status.ERROR
-    assert "non-list" in findings[0].evidence["reason"]
+    assert "unexpected JSON shape" in findings[0].evidence["reason"]
 
 
-async def test_run_succeeds_after_one_retry(monkeypatch):
-    monkeypatch.setattr(crtsh_plugin.asyncio, "sleep", _instant_sleep)
-    attempts = []
+async def test_run_succeeds_after_one_retry(monkeypatch, fake_docker, docker_result):
+    monkeypatch.setattr(_common.asyncio, "sleep", _instant_sleep)
+    calls = fake_docker(
+        _common,
+        docker_result(b"", returncode=1, stderr=b"502 Bad Gateway"),
+        docker_result(b"[]"),
+    )
 
-    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
-        attempts.append(1)
-        if len(attempts) == 1:
-            return DockerRunResult(ok=True, returncode=1, stdout=b"", stderr=b"502 Bad Gateway", error=None)
-        return DockerRunResult(ok=True, returncode=0, stdout=b"[]", stderr=b"", error=None)
+    findings = await CrtShPlugin().run("example.com")
 
-    monkeypatch.setattr(crtsh_plugin, "run_hardened", fake_run_hardened)
-
-    plugin = CrtShPlugin()
-    findings = await plugin.run("example.com")
-
-    assert len(attempts) == 2
+    assert len(calls) == 2
     assert findings[0].status == Status.NOT_FOUND

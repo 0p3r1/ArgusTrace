@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CheckIcon, CloseIcon, CopyIcon } from './icons.jsx'
+import RemoteAvatar from './RemoteAvatar.jsx'
 import StatusBadge from './StatusBadge.jsx'
 
 // Fields already given their own dedicated spot in the modal (subtitle, map
@@ -144,15 +145,7 @@ export default function FindingDetailModal({ finding, onClose }) {
           </button>
         </div>
         <div className="detail-modal-body">
-          {profile?.image && (
-            <img
-              src={profile.image}
-              alt=""
-              className="detail-modal-photo"
-              referrerPolicy="no-referrer"
-              onError={(e) => { e.currentTarget.style.display = 'none' }}
-            />
-          )}
+          <RemoteAvatar src={profile?.image} className="detail-modal-photo" />
           {evidence.headline && (
             <p className="detail-modal-headline">
               {evidence.headline}

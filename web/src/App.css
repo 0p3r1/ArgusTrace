@@ -1181,6 +1181,27 @@
   background: var(--surface-hover);
 }
 
+/* Stands in for a remote profile picture until the user asks for it — see
+   RemoteAvatar.jsx: fetching one reveals their IP to the host serving it. */
+.avatar-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+  background: var(--surface-hover);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.avatar-placeholder:hover {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .profile-text {
   display: flex;
   flex-direction: column;

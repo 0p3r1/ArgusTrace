@@ -4,6 +4,7 @@ import { downloadFindings, findingsContent } from './exportFindings.js'
 import FindingDetailModal from './FindingDetailModal.jsx'
 import { CloseIcon, EyeIcon, MinimizeIcon } from './icons.jsx'
 import PreviewModal from './PreviewModal.jsx'
+import RemoteAvatar from './RemoteAvatar.jsx'
 import StatusBadge from './StatusBadge.jsx'
 import { truncateForDisplay } from './textUtils.js'
 
@@ -39,16 +40,7 @@ function ProfileSummary({ profile, relatedIds }) {
 
   return (
     <div className="profile-cell">
-      {profile?.image && (
-        <img
-          src={profile.image}
-          alt=""
-          className="profile-avatar"
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={(e) => { e.currentTarget.style.display = 'none' }}
-        />
-      )}
+      <RemoteAvatar src={profile?.image} className="profile-avatar" />
       <div className="profile-text">
         {label && <span className="profile-name">{label}</span>}
         {meta.length > 0 && <span className="profile-meta">{meta.join(' · ')}</span>}

@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Deliberately narrow. script-src and connect-src are omitted rather than
+      guessed: Vite's dev server injects inline scripts for HMR, and the API
+      origin is configurable (VITE_ARGUSTRACE_API_BASE), so a policy covering
+      them would either break development or be wrong for anyone who moved the
+      backend. The directives below cannot break either case. Containment for
+      tool-generated report HTML comes from the iframe's sandbox="" in
+      PreviewModal.jsx, not from here.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
     <title>ArgusTrace</title>
   </head>
   <body>

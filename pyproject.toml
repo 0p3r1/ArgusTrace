@@ -63,5 +63,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Asserts are the entire point of a test file.
-"tests/*" = ["S101"]
+# Asserts are the entire point of a test file. The security lints below fire
+# on fixtures that exist precisely to exercise the guards: throwaway tokens
+# (S105/S106) and the "0.0.0.0" that test_api_auth.py checks is *refused*
+# without one (S104).
+"tests/*" = ["S101", "S104", "S105", "S106"]

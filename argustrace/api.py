@@ -1,22 +1,44 @@
+import secrets
 from datetime import datetime
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from argustrace import versioning
 from argustrace.core.models import Finding
 from argustrace.plugins.registry import NATIVE_REPORT_GENERATORS, PLUGINS, TOOL_FAMILIES
+from argustrace.settings import SETTINGS
 
-app = FastAPI(title="ArgusTrace")
+TOKEN_HEADER = "X-ArgusTrace-Token"  # noqa: S105 — a header name, not a secret
 
-# Dev-only: lets the Vite dev server (a different origin) call this API.
+
+def require_token(x_argustrace_token: str = Header(default="")) -> None:
+    """Gate every endpoint behind a shared token, when one is configured.
+
+    Reaching this API means being able to run containers and make the host
+    fetch arbitrary URLs, so it is not something to leave open on a reachable
+    interface. No token is required by default because the intended use is
+    loopback-only and a mandatory secret would just be friction; `argustrace
+    serve` is what refuses to bind a non-loopback address without one.
+    """
+    if not SETTINGS.api_token:
+        return
+    if not secrets.compare_digest(x_argustrace_token, SETTINGS.api_token):
+        raise HTTPException(status_code=401, detail=f"missing or invalid {TOKEN_HEADER}")
+
+
+app = FastAPI(title="ArgusTrace", dependencies=[Depends(require_token)])
+
+# Lets the Vite dev server (a different origin) call this API. Methods and
+# headers are enumerated rather than "*" so the allowance stays as narrow as
+# what the frontend actually uses.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=list(SETTINGS.cors_origins),
+    allow_methods=["GET", "POST"],
+    allow_headers=["content-type", TOKEN_HEADER],
 )
 
 

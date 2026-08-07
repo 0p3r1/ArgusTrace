@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { API_BASE } from './api.js'
+import { API_BASE, apiFetch } from './api.js'
 import { downloadFindings, findingsContent } from './exportFindings.js'
 import FindingDetailModal from './FindingDetailModal.jsx'
 import { CloseIcon, EyeIcon, MinimizeIcon } from './icons.jsx'
@@ -152,7 +152,7 @@ export default function ResultsPanel({ family, plugin, entity, findings, error, 
       error: null,
     })
     try {
-      const res = await fetch(reportUrl(r.format))
+      const res = await apiFetch(reportUrl(r.format))
       if (!res.ok) throw new Error(`API returned ${res.status}`)
       const text = await res.text()
       setPreview((prev) => (prev ? { ...prev, content: text, loading: false } : prev))

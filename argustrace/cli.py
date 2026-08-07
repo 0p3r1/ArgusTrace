@@ -1,11 +1,20 @@
 import asyncio
+import ipaddress
 import json
 
 import typer
 
 from argustrace.plugins.registry import PLUGINS, TOOL_FAMILIES
+from argustrace.settings import SETTINGS
 
 app = typer.Typer()
+
+
+def _is_loopback(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host == "localhost"
 
 
 def _family_for_plugin(plugin: str) -> dict | None:
@@ -86,6 +95,31 @@ def options(plugin: str = typer.Argument(None, help="Plugin/variant key, e.g. 'm
     for opt in family["options"]:
         print(f"{opt['name']} ({opt['type']}, flag {opt['flag']}, default={opt.get('default')!r})")
         print(f"    {opt['description']}")
+
+
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", help="Interface to bind. Loopback unless a token is set."),
+    port: int = typer.Option(8000, help="Port to listen on."),
+):
+    """Run the web API.
+
+    Defaults to loopback because reaching this API means being able to run
+    containers and make the host fetch arbitrary URLs. Binding it anywhere
+    else without ARGUSTRACE_API_TOKEN is refused here rather than left as a
+    documentation convention.
+    """
+    if not _is_loopback(host) and not SETTINGS.api_token:
+        raise typer.BadParameter(
+            f"refusing to bind {host} without authentication: anyone who can reach this port "
+            "could run containers and make this host fetch arbitrary URLs. Set "
+            "ARGUSTRACE_API_TOKEN to a shared secret, or bind 127.0.0.1.",
+            param_hint="--host",
+        )
+
+    import uvicorn
+
+    uvicorn.run("argustrace.api:app", host=host, port=port)
 
 
 if __name__ == "__main__":

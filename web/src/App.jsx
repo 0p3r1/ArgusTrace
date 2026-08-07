@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Route, Routes, useSearchParams } from 'react-router-dom'
 import './App.css'
-import { API_BASE } from './api.js'
+import { API_BASE, apiFetch } from './api.js'
 import { BrandMark } from './icons.jsx'
 import InvestigatePage from './InvestigatePage.jsx'
 import ResultsPanel from './ResultsPanel.jsx'
@@ -92,7 +92,7 @@ function App() {
     const id = nextResultId++
 
     try {
-      const res = await fetch(`${API_BASE}/api/investigate`, {
+      const res = await apiFetch(`${API_BASE}/api/investigate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

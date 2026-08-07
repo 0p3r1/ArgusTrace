@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { API_BASE } from './api.js'
+import { API_BASE, apiFetch } from './api.js'
 
 export function useToolFamilies() {
   const [families, setFamilies] = useState([])
@@ -7,7 +7,7 @@ export function useToolFamilies() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/plugins`)
+    apiFetch(`${API_BASE}/api/plugins`)
       .then((res) => res.json())
       .then((data) => setFamilies(data))
       .catch(() => setError('Could not reach the ArgusTrace API. Is it running?'))

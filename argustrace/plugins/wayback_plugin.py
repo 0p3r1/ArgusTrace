@@ -4,8 +4,9 @@ from urllib.parse import quote, urlparse
 
 from argustrace.core.models import Finding, Status
 from argustrace.plugins._docker_runner import run_hardened
+from argustrace.settings import SETTINGS
 
-IMAGE = "argustrace-curl:1.0"  # generic curl image, shared with other simple HTTP-API plugins
+IMAGE = SETTINGS.curl_image  # shared "fetch a JSON URL" image
 ENTITY_PATTERN = re.compile(r"^(?=.{1,253}$)([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$")
 RUN_TIMEOUT_S = 40
 

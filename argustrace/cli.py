@@ -4,6 +4,8 @@ import json
 
 import typer
 
+from argustrace.plugins.options import OptionError
+from argustrace.plugins.options import validate as validate_options
 from argustrace.plugins.registry import PLUGINS, TOOL_FAMILIES
 from argustrace.settings import SETTINGS
 
@@ -24,37 +26,26 @@ def _family_for_plugin(plugin: str) -> dict | None:
     return None
 
 
-def _coerce_option(name: str, raw: str, spec: dict):
-    if spec["type"] == "int":
-        try:
-            return int(raw)
-        except ValueError:
-            raise typer.BadParameter(f"--option {name}: expected an integer, got {raw!r}") from None
-    if spec["type"] == "bool":
-        return raw.strip().lower() not in ("", "0", "false", "no")
-    if spec["type"] == "enum_multi":
-        return [v.strip() for v in raw.split(",") if v.strip()]
-    return raw
-
-
 def _build_options(plugin: str, pairs: list[str]) -> dict:
+    """Parse `name=value` pairs, then hand them to the shared validator.
+
+    Coercion and bounds checking live in plugins/options.py so the CLI and the
+    API agree on what a given value means and on which values are refused.
+    """
     if not pairs:
         return {}
 
-    family = _family_for_plugin(plugin)
-    specs = {opt["name"]: opt for opt in family["options"]} if family else {}
-
-    options = {}
+    raw: dict[str, str] = {}
     for pair in pairs:
-        name, sep, raw = pair.partition("=")
+        name, sep, value = pair.partition("=")
         if not sep:
             raise typer.BadParameter(f"expected name=value, got {pair!r}")
-        spec = specs.get(name)
-        if spec is None:
-            known = ", ".join(specs) or "(none)"
-            raise typer.BadParameter(f"unknown option {name!r} for plugin {plugin!r} — known options: {known}")
-        options[name] = _coerce_option(name, raw, spec)
-    return options
+        raw[name] = value
+
+    try:
+        return validate_options(plugin, raw)
+    except OptionError as e:
+        raise typer.BadParameter(str(e)) from None
 
 
 @app.command()

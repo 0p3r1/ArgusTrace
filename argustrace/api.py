@@ -8,6 +8,8 @@ from pydantic import BaseModel
 
 from argustrace import versioning
 from argustrace.core.models import Finding
+from argustrace.plugins.options import OptionError
+from argustrace.plugins.options import validate as validate_options
 from argustrace.plugins.registry import NATIVE_REPORT_GENERATORS, PLUGINS, TOOL_FAMILIES
 from argustrace.settings import SETTINGS
 
@@ -170,7 +172,15 @@ async def investigate(req: InvestigateRequest) -> list[Finding]:
     selected = PLUGINS.get(req.plugin)
     if selected is None:
         raise HTTPException(status_code=404, detail=f"unknown plugin: {req.plugin}")
-    return await selected.run(req.entity, req.options)
+
+    # Checked here rather than inside each plugin so a bad value is refused
+    # with a message instead of being silently clamped or dropped.
+    try:
+        options = validate_options(req.plugin, req.options)
+    except OptionError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    return await selected.run(req.entity, options or None)
 
 
 @app.get("/api/tools/{family}/report")

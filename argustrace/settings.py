@@ -29,6 +29,14 @@ def _int_env(name: str, default: int, *, lo: int, hi: int) -> int:
     return max(lo, min(hi, value))
 
 
+def _float_env(name: str, default: float, *, lo: float, hi: float) -> float:
+    try:
+        value = float(_env(name, str(default)))
+    except ValueError:
+        return default
+    return max(lo, min(hi, value))
+
+
 @dataclass(frozen=True)
 class Settings:
     #: Shared secret required on every API request. Empty means no auth,
@@ -43,6 +51,20 @@ class Settings:
     #: 512 MB, so without a ceiling N simultaneous requests means N x 512 MB
     #: and N full tool scans competing for the same network.
     max_concurrent_runs: int
+    #: Multiplier applied to every container timeout, for slow links or
+    #: overloaded machines. One knob instead of ~24 environment variables,
+    #: and it can only lengthen: several plugins must outlast the timeout
+    #: their container applies internally (see the curl image's --max-time,
+    #: asserted in tests/test_registry_consistency.py), and shortening them
+    #: would resurrect exactly the bug that test exists to prevent.
+    timeout_scale: float
+    #: Tag of the shared curl image. Every "fetch a JSON URL" plugin uses it,
+    #: so it lives here rather than being repeated in each of them. The
+    #: digest-pinned upstream images (Sherlock, Maigret) are deliberately not
+    #: overridable — pinning them is a supply-chain invariant, not a setting.
+    curl_image: str
+    #: Root logger level.
+    log_level: str
 
 
 def load() -> Settings:
@@ -54,6 +76,9 @@ def load() -> Settings:
             if origin.strip()
         ),
         max_concurrent_runs=_int_env("MAX_CONCURRENT_RUNS", 4, lo=1, hi=32),
+        timeout_scale=_float_env("TIMEOUT_SCALE", 1.0, lo=1.0, hi=6.0),
+        curl_image=_env("CURL_IMAGE", "argustrace-curl:1.0"),
+        log_level=_env("LOG_LEVEL", "INFO").upper(),
     )
 
 

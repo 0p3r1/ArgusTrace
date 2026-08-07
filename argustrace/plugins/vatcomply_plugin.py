@@ -5,8 +5,9 @@ from urllib.parse import quote
 
 from argustrace.core.models import Finding, Status
 from argustrace.plugins._docker_runner import run_hardened
+from argustrace.settings import SETTINGS
 
-IMAGE = "argustrace-curl:1.0"  # generic curl image, shared with other simple HTTP-API plugins
+IMAGE = SETTINGS.curl_image  # shared "fetch a JSON URL" image
 # Above the shared curl image's own --max-time (25s) plus startup — see
 # name_plugin.py for the rationale; asserted in test_registry_consistency.py.
 RUN_TIMEOUT_S = 35

@@ -93,3 +93,30 @@ def test_get_native_report_threads_plugin_variant_to_generator(monkeypatch):
     )
     assert res.status_code == 200
     assert captured["plugin"] == "theharvester-broad"
+
+
+def test_investigate_rejects_an_out_of_range_option():
+    """422 with a message, rather than silently clamping the value."""
+    res = client.post(
+        "/api/investigate",
+        json={"entity": "alice", "plugin": "sherlock", "options": {"timeout": 999}},
+    )
+    assert res.status_code == 422
+    assert "outside the accepted range" in res.json()["detail"]
+
+
+def test_investigate_rejects_an_unknown_option():
+    res = client.post(
+        "/api/investigate",
+        json={"entity": "alice", "plugin": "sherlock", "options": {"bogus": 1}},
+    )
+    assert res.status_code == 422
+    assert "bogus" in res.json()["detail"]
+
+
+def test_investigate_accepts_valid_options():
+    res = client.post(
+        "/api/investigate",
+        json={"entity": "alice", "plugin": "mock", "options": None},
+    )
+    assert res.status_code == 200

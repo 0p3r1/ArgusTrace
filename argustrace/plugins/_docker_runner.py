@@ -108,6 +108,14 @@ async def run_hardened(
     env: dict[str, str] | None = None,
     network: str | None = None,
 ) -> DockerRunResult:
+    # Scaled here rather than in each plugin: one place, and every caller
+    # (including future ones) gets it without having to remember. The scale
+    # can only lengthen, so this cannot pull a timeout below the one a
+    # container applies to itself.
+    # No floor needed: the scale is clamped to >= 1.0 in settings, so this
+    # can only ever lengthen the deadline it was given.
+    timeout_s = round(timeout_s * SETTINGS.timeout_scale)
+
     async with _concurrency_slot():
         # Holds the cidfile and, when needed, the env-file. Both must outlive
         # the run and neither may leak the secret beyond it.

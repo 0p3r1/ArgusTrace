@@ -5,8 +5,9 @@ from urllib.parse import quote
 
 from argustrace.core.models import Finding, Status
 from argustrace.plugins._docker_runner import run_hardened
+from argustrace.settings import SETTINGS
 
-IMAGE = "argustrace-curl:1.0"
+IMAGE = SETTINGS.curl_image  # shared "fetch a JSON URL" image
 RUN_TIMEOUT_S = 35
 
 RDAP_URL = "https://rdap.org/ip/{ip}"

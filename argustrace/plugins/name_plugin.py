@@ -5,8 +5,9 @@ from urllib.parse import quote
 
 from argustrace.core.models import Finding, Status
 from argustrace.plugins._docker_runner import run_hardened
+from argustrace.settings import SETTINGS
 
-IMAGE = "argustrace-curl:1.0"  # generic curl image, shared with other simple HTTP-API plugins
+IMAGE = SETTINGS.curl_image  # shared "fetch a JSON URL" image
 # Must stay above the shared curl image's own --max-time (25s) plus container
 # startup, so curl aborts with a clean error instead of the outer docker
 # timeout killing the container mid-request. Asserted in

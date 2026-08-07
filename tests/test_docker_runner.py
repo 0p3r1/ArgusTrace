@@ -254,3 +254,40 @@ async def test_nonzero_exit_still_counts_as_a_completed_run(spy_exec):
 
     assert result.ok is True
     assert result.returncode == 1
+
+
+async def test_timeout_scale_lengthens_the_deadline(monkeypatch, spy_exec):
+    """One knob instead of ~24 environment variables, applied centrally so
+    every caller gets it without having to remember."""
+    monkeypatch.setattr(
+        _docker_runner, "SETTINGS", replace(_docker_runner.SETTINGS, timeout_scale=3.0),
+    )
+    spy_exec(process=FakeProcess(stdout=b"ok"))
+
+    captured = {}
+    real_wait_for = _docker_runner.asyncio.wait_for
+
+    async def spy_wait_for(awaitable, timeout):
+        captured["timeout"] = timeout
+        return await real_wait_for(awaitable, timeout)
+
+    monkeypatch.setattr(_docker_runner.asyncio, "wait_for", spy_wait_for)
+    await run_hardened("img", [], timeout_s=10)
+
+    assert captured["timeout"] == 30
+
+
+def test_timeout_scale_is_clamped_so_it_can_never_shorten_a_timeout(monkeypatch):
+    """Several plugins must outlast the timeout their container applies to
+    itself, so a scale below 1 would resurrect exactly the bug
+    test_registry_consistency.py guards against."""
+    from argustrace import settings
+
+    monkeypatch.setenv("ARGUSTRACE_TIMEOUT_SCALE", "0.1")
+    assert settings.load().timeout_scale == 1.0
+
+    monkeypatch.setenv("ARGUSTRACE_TIMEOUT_SCALE", "2.5")
+    assert settings.load().timeout_scale == 2.5
+
+    monkeypatch.setenv("ARGUSTRACE_TIMEOUT_SCALE", "not-a-number")
+    assert settings.load().timeout_scale == 1.0

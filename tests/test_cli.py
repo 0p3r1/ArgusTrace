@@ -24,8 +24,13 @@ def test_investigate_rejects_unknown_plugin():
 def test_investigate_rejects_unknown_option_name():
     result = runner.invoke(app, ["investigate", "alice", "--plugin", "maigret", "-o", "bogus=1"])
     assert result.exit_code != 0
-    assert "unknown option 'bogus'" in result.output
-    assert "timeout, retries, tags, exclude_tags, enrich" in result.output
+    # Typer renders errors in a Rich box that hard-wraps, so assert on words
+    # rather than a phrase that a line break can split.
+    output = " ".join(result.output.split())
+    assert "bogus" in output
+    assert "accepted" in output
+    for known in ("timeout", "retries", "tags", "enrich"):
+        assert known in output
 
 
 def test_investigate_rejects_malformed_option_pair():

@@ -1,13 +1,12 @@
-import json
 import re
 from urllib.parse import quote, urlparse
 
 from argustrace.core.models import Finding, Status
-from argustrace.plugins._docker_runner import run_hardened
-from argustrace.settings import SETTINGS
+from argustrace.plugins._common import DOMAIN_PATTERN_SOURCE, error_finding, fetch_json
 
-IMAGE = SETTINGS.curl_image  # shared "fetch a JSON URL" image
-ENTITY_PATTERN = re.compile(r"^(?=.{1,253}$)([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$")
+ENTITY_PATTERN = re.compile(DOMAIN_PATTERN_SOURCE)
+# Must stay above the shared curl image's own --max-time plus container
+# startup; asserted in tests/test_registry_consistency.py.
 RUN_TIMEOUT_S = 40
 
 # matchType=domain pulls in every host under the domain (subdomains
@@ -33,18 +32,13 @@ class WaybackPlugin:
             f"&collapse=urlkey&limit={ROW_LIMIT}&fl=original,timestamp,statuscode"
         )
 
-        result = await run_hardened(IMAGE, [url], timeout_s=RUN_TIMEOUT_S)
-        if not result.ok:
-            return [self._error(entity, result.error)]
-        if result.returncode != 0:
-            return [self._error(entity, f"curl failed: {result.stderr.decode(errors='replace')[:300]}")]
+        fetched = await fetch_json(
+            url, timeout_s=RUN_TIMEOUT_S, describe="the Wayback Machine", expect=list,
+        )
+        if fetched.error:
+            return [self._error(entity, fetched.error)]
 
-        try:
-            rows = json.loads(result.stdout.decode())
-        except json.JSONDecodeError:
-            return [self._error(entity, "Wayback Machine returned a non-JSON response")]
-
-        return self._parse_rows(entity, rows)
+        return self._parse_rows(entity, fetched.data)
 
     def _parse_rows(self, entity: str, rows: list[list[str]]) -> list[Finding]:
         if not rows:
@@ -106,6 +100,4 @@ class WaybackPlugin:
         return f"{ts[0:4]}-{ts[4:6]}-{ts[6:8]}"
 
     def _error(self, entity: str, reason: str) -> Finding:
-        return Finding(
-            entity=entity, entity_type="domain", source="wayback", status=Status.ERROR, evidence={"reason": reason},
-        )
+        return error_finding(entity, entity_type="domain", source="wayback", reason=reason)

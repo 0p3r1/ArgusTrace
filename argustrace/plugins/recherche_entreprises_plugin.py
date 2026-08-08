@@ -1,13 +1,10 @@
-import json
 from urllib.parse import urlencode
 
 from argustrace.core.models import Finding, Status
-from argustrace.plugins._docker_runner import run_hardened
-from argustrace.settings import SETTINGS
+from argustrace.plugins._common import clamp_int, error_finding, fetch_json
 
-IMAGE = SETTINGS.curl_image  # shared "fetch a JSON URL" image
-# Above the shared curl image's own --max-time (25s) plus startup — see
-# name_plugin.py for the rationale; asserted in test_registry_consistency.py.
+# Must stay above the shared curl image's own --max-time plus container
+# startup; asserted in tests/test_registry_consistency.py.
 RUN_TIMEOUT_S = 35
 BASE_URL = "https://recherche-entreprises.api.gouv.fr/search"
 
@@ -59,14 +56,16 @@ class RechercheEntreprisesPlugin:
                 "unless at least one option (e.g. nom_personne) is set",
             )]
 
-        url = self._build_url(entity, options)
-        result = await run_hardened(IMAGE, [url], timeout_s=RUN_TIMEOUT_S)
-        if not result.ok:
-            return [self._error(entity, result.error)]
-        if result.returncode != 0:
-            return [self._error(entity, f"curl failed: {result.stderr.decode(errors='replace')[:300]}")]
+        fetched = await fetch_json(
+            self._build_url(entity, options),
+            timeout_s=RUN_TIMEOUT_S,
+            describe="recherche-entreprises",
+            expect=dict,
+        )
+        if fetched.error:
+            return [self._error(entity, fetched.error)]
 
-        return self._parse_response(entity, result.stdout.decode(errors="replace"))
+        return self._parse_response(entity, fetched.data)
 
     def _has_any_filter(self, options: dict) -> bool:
         all_param_names = [*SIMPLE_STR_PARAMS, *ENUM_PARAMS, *INT_PARAMS, *BOOL_PARAMS]
@@ -98,26 +97,17 @@ class RechercheEntreprisesPlugin:
             if options.get(name):
                 params[name] = "true"
 
-        try:
-            per_page = int(options.get("per_page", DEFAULT_PER_PAGE))
-        except (TypeError, ValueError):
-            per_page = DEFAULT_PER_PAGE
-        params["per_page"] = max(PER_PAGE_MIN, min(PER_PAGE_MAX, per_page))
-
-        try:
-            page = int(options.get("page", DEFAULT_PAGE))
-        except (TypeError, ValueError):
-            page = DEFAULT_PAGE
-        params["page"] = max(PAGE_MIN, min(PAGE_MAX, page))
+        params["per_page"] = clamp_int(
+            options.get("per_page", DEFAULT_PER_PAGE),
+            default=DEFAULT_PER_PAGE, low=PER_PAGE_MIN, high=PER_PAGE_MAX,
+        )
+        params["page"] = clamp_int(
+            options.get("page", DEFAULT_PAGE), default=DEFAULT_PAGE, low=PAGE_MIN, high=PAGE_MAX,
+        )
 
         return f"{BASE_URL}?{urlencode(params)}"
 
-    def _parse_response(self, entity: str, stdout: str) -> list[Finding]:
-        try:
-            data = json.loads(stdout)
-        except json.JSONDecodeError:
-            return [self._error(entity, "recherche-entreprises returned a non-JSON response")]
-
+    def _parse_response(self, entity: str, data: dict) -> list[Finding]:
         results = data.get("results")
         if results is None:
             return [self._error(entity, data.get("message") or data.get("detail") or "unexpected response shape")]
@@ -183,7 +173,4 @@ class RechercheEntreprisesPlugin:
         )
 
     def _error(self, entity: str, reason: str) -> Finding:
-        return Finding(
-            entity=entity, entity_type="company", source="recherche-entreprises",
-            status=Status.ERROR, evidence={"reason": reason},
-        )
+        return error_finding(entity, entity_type="company", source="recherche-entreprises", reason=reason)

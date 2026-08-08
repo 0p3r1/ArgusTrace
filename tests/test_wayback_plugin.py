@@ -1,8 +1,7 @@
 import json
 
 from argustrace.core.models import Status
-from argustrace.plugins import wayback_plugin
-from argustrace.plugins._docker_runner import DockerRunResult
+from argustrace.plugins import _common, wayback_plugin
 from argustrace.plugins.wayback_plugin import WaybackPlugin
 
 
@@ -47,14 +46,10 @@ def test_format_timestamp():
     assert plugin._format_timestamp("20240510074012") == "2024-05-10"
 
 
-async def test_run_reports_docker_failure(monkeypatch):
-    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
-        return DockerRunResult(ok=True, returncode=1, stdout=b"", stderr=b"boom", error=None)
+async def test_run_reports_docker_failure(fake_docker, docker_result):
+    fake_docker(_common, docker_result(b"", returncode=1, stderr=b"boom"))
 
-    monkeypatch.setattr(wayback_plugin, "run_hardened", fake_run_hardened)
-
-    plugin = WaybackPlugin()
-    findings = await plugin.run("example.com")
+    findings = await WaybackPlugin().run("example.com")
 
     assert findings[0].status == Status.ERROR
     assert "curl failed" in findings[0].evidence["reason"]
@@ -91,18 +86,14 @@ def test_parse_rows_no_truncation_flag_when_under_the_limit():
     assert "possibly incomplete" not in findings[0].evidence["headline"]
 
 
-async def test_run_parses_real_shaped_output(monkeypatch):
-    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
-        stdout = json.dumps([
-            ["original", "timestamp", "statuscode"],
-            ["http://example.com/", "20100101000000", "200"],
-        ]).encode()
-        return DockerRunResult(ok=True, returncode=0, stdout=stdout, stderr=b"", error=None)
+async def test_run_parses_real_shaped_output(fake_docker, docker_result):
+    stdout = json.dumps([
+        ["original", "timestamp", "statuscode"],
+        ["http://example.com/", "20100101000000", "200"],
+    ]).encode()
+    fake_docker(_common, docker_result(stdout))
 
-    monkeypatch.setattr(wayback_plugin, "run_hardened", fake_run_hardened)
-
-    plugin = WaybackPlugin()
-    findings = await plugin.run("example.com")
+    findings = await WaybackPlugin().run("example.com")
 
     assert findings[0].status == Status.FOUND
     assert findings[0].evidence["host"] == "example.com"

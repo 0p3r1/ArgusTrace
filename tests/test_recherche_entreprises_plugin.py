@@ -1,8 +1,7 @@
 import json
 
 from argustrace.core.models import Status
-from argustrace.plugins import recherche_entreprises_plugin
-from argustrace.plugins._docker_runner import DockerRunResult
+from argustrace.plugins import _common
 from argustrace.plugins.recherche_entreprises_plugin import RechercheEntreprisesPlugin
 
 
@@ -44,19 +43,21 @@ def test_build_url_allows_blank_q_when_a_filter_is_present():
 
 def test_parse_response_empty_results_is_not_found():
     plugin = RechercheEntreprisesPlugin()
-    stdout = json.dumps({"results": [], "total_results": 0})
-
-    findings = plugin._parse_response("zzznonexistent", stdout)
+    findings = plugin._parse_response("zzznonexistent", {"results": [], "total_results": 0})
 
     assert len(findings) == 1
     assert findings[0].status == Status.NOT_FOUND
 
 
-def test_parse_response_non_json_is_error():
-    plugin = RechercheEntreprisesPlugin()
-    findings = plugin._parse_response("carrefour", "<html>not json</html>")
+async def test_run_reports_non_json_response(fake_docker, docker_result):
+    """JSON parsing moved into the shared fetch helper, so this is now a
+    fetch-level failure rather than something _parse_response sees."""
+    fake_docker(_common, docker_result(b"<html>not json</html>"))
+
+    findings = await RechercheEntreprisesPlugin().run("carrefour")
 
     assert findings[0].status == Status.ERROR
+    assert "non-JSON" in findings[0].evidence["reason"]
 
 
 def test_to_finding_maps_fields_and_is_always_found_regardless_of_etat():
@@ -84,12 +85,10 @@ def test_to_finding_maps_fields_and_is_always_found_regardless_of_etat():
 
 def test_parse_response_builds_one_finding_per_result():
     plugin = RechercheEntreprisesPlugin()
-    stdout = json.dumps({"results": [
+    findings = plugin._parse_response("test", {"results": [
         {"siren": "111", "nom_complet": "A", "siege": {}, "dirigeants": []},
         {"siren": "222", "nom_complet": "B", "siege": {}, "dirigeants": []},
     ]})
-
-    findings = plugin._parse_response("test", stdout)
 
     assert len(findings) == 2
     assert {f.source for f in findings} == {"recherche-entreprises:111", "recherche-entreprises:222"}
@@ -206,41 +205,31 @@ def test_build_url_ignores_invalid_page_type():
     assert "page=1" in url
 
 
-async def test_run_reports_docker_failure(monkeypatch):
-    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
-        return DockerRunResult(ok=False, returncode=None, stdout=b"", stderr=b"", error="docker not available")
+async def test_run_reports_docker_failure(fake_docker, docker_result):
+    fake_docker(_common, docker_result(ok=False, returncode=None, error="docker not available"))
 
-    monkeypatch.setattr(recherche_entreprises_plugin, "run_hardened", fake_run_hardened)
-
-    plugin = RechercheEntreprisesPlugin()
-    findings = await plugin.run("carrefour")
+    findings = await RechercheEntreprisesPlugin().run("carrefour")
 
     assert findings[0].status == Status.ERROR
     assert "docker not available" in findings[0].evidence["reason"]
 
 
-async def test_run_reports_nonzero_exit(monkeypatch):
-    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
-        return DockerRunResult(ok=True, returncode=1, stdout=b"", stderr=b"boom", error=None)
+async def test_run_reports_nonzero_exit(fake_docker, docker_result):
+    fake_docker(_common, docker_result(b"", returncode=1, stderr=b"boom"))
 
-    monkeypatch.setattr(recherche_entreprises_plugin, "run_hardened", fake_run_hardened)
-
-    plugin = RechercheEntreprisesPlugin()
-    findings = await plugin.run("carrefour")
+    findings = await RechercheEntreprisesPlugin().run("carrefour")
 
     assert findings[0].status == Status.ERROR
     assert "curl failed" in findings[0].evidence["reason"]
 
 
-async def test_run_parses_real_shaped_output(monkeypatch):
-    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
-        stdout = json.dumps({"results": [{"siren": "652014051", "nom_complet": "CARREFOUR", "siege": {}, "dirigeants": []}]}).encode()
-        return DockerRunResult(ok=True, returncode=0, stdout=stdout, stderr=b"", error=None)
+async def test_run_parses_real_shaped_output(fake_docker, docker_result):
+    stdout = json.dumps({"results": [
+        {"siren": "652014051", "nom_complet": "CARREFOUR", "siege": {}, "dirigeants": []},
+    ]}).encode()
+    fake_docker(_common, docker_result(stdout))
 
-    monkeypatch.setattr(recherche_entreprises_plugin, "run_hardened", fake_run_hardened)
-
-    plugin = RechercheEntreprisesPlugin()
-    findings = await plugin.run("carrefour")
+    findings = await RechercheEntreprisesPlugin().run("carrefour")
 
     assert findings[0].status == Status.FOUND
     assert findings[0].source == "recherche-entreprises:652014051"

@@ -4,6 +4,7 @@ import json
 
 import typer
 
+from argustrace import __version__
 from argustrace.plugins.options import OptionError
 from argustrace.plugins.options import validate as validate_options
 from argustrace.plugins.registry import PLUGINS, TOOL_FAMILIES
@@ -86,6 +87,12 @@ def options(plugin: str = typer.Argument(None, help="Plugin/variant key, e.g. 'm
     for opt in family["options"]:
         print(f"{opt['name']} ({opt['type']}, flag {opt['flag']}, default={opt.get('default')!r})")
         print(f"    {opt['description']}")
+
+
+@app.command()
+def version():
+    """Print the installed ArgusTrace version."""
+    print(__version__)
 
 
 @app.command()

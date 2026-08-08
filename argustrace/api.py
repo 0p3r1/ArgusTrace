@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from argustrace import versioning
+from argustrace import __version__, versioning
 from argustrace.core.models import Finding
 from argustrace.logging_setup import configure as configure_logging
 from argustrace.logging_setup import get_logger
@@ -37,7 +37,7 @@ def require_token(x_argustrace_token: str = Header(default="")) -> None:
         raise HTTPException(status_code=401, detail=f"missing or invalid {TOKEN_HEADER}")
 
 
-app = FastAPI(title="ArgusTrace", dependencies=[Depends(require_token)])
+app = FastAPI(title="ArgusTrace", version=__version__, dependencies=[Depends(require_token)])
 
 # Lets the Vite dev server (a different origin) call this API. Methods and
 # headers are enumerated rather than "*" so the allowance stays as narrow as
@@ -152,6 +152,11 @@ def _tool_family(family: str, info: dict) -> ToolFamily:
         requires_key=info.get("requires_key", False),
         key_note=info.get("key_note"),
     )
+
+
+@app.get("/api/version")
+def get_version() -> dict[str, str]:
+    return {"version": __version__}
 
 
 @app.get("/api/plugins")

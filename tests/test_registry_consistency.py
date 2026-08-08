@@ -159,3 +159,25 @@ def test_curl_backed_plugins_outlast_the_container_own_timeout():
             f"{max_time}s — the outer timeout fires first and the container is killed "
             "mid-request instead of curl returning its own error"
         )
+
+
+def test_package_version_matches_pyproject():
+    """The declared version and the installed one must not drift apart."""
+    import tomllib
+
+    from argustrace import __version__
+
+    with (REPO_ROOT / "pyproject.toml").open("rb") as f:
+        declared = tomllib.load(f)["project"]["version"]
+    assert __version__ == declared
+
+
+def test_every_visible_family_has_implementation_notes():
+    """docs/plugins/ fell five tools behind before; keep it from happening
+    again silently."""
+    documented = {p.stem for p in (REPO_ROOT / "docs" / "plugins").glob("*.md")}
+    missing = sorted(
+        family for family, info in TOOL_FAMILIES.items()
+        if not info.get("hidden") and family not in documented
+    )
+    assert not missing, f"no docs/plugins/<name>.md for: {', '.join(missing)}"

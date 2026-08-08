@@ -1,16 +1,23 @@
-# React + Vite
+# ArgusTrace web frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React + Vite interface for the ArgusTrace API. It renders the tool catalog
+from `/api/plugins`, runs investigations, and displays the tri-state
+findings.
 
-Currently, two official plugins are available:
+```bash
+npm install
+npm run dev     # http://localhost:5173, expects the API on 127.0.0.1:8000
+npm run lint
+npm run build
+```
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Both endpoints are overridable at build time:
 
-## React Compiler
+- `VITE_ARGUSTRACE_API_BASE` — where the API lives.
+- `VITE_ARGUSTRACE_TOKEN` — sent as `X-ArgusTrace-Token` when the API is
+  configured to require one. Not needed for the default loopback setup.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+See the repository [README](../README.md) for running the backend, and
+[CLAUDE.md](../CLAUDE.md) for the conventions this UI relies on — in
+particular the `evidence` keys (`headline`, `profile`, `coordinates`) that
+get their own rendering.

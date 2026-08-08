@@ -64,38 +64,35 @@ propagates as an exception.
 ```
 argustrace/
 ├── core/
-│   └── models.py       # Status, Finding
+│   └── models.py            # Status, Finding
 ├── plugins/
-│   ├── base.py          # Plugin protocol
-│   ├── registry.py      # PLUGINS + TOOL_FAMILIES, shared by the CLI and the API
-│   ├── _docker_runner.py  # shared hardened `docker run` helper
-│   ├── mock_plugin.py   # hardcoded findings, no I/O — proves the pipeline
-│   ├── sherlock_plugin.py  # runs Sherlock in a hardened Docker container
-│   ├── maigret_plugin.py   # runs Maigret in a hardened Docker container
-│   ├── holehe_plugin.py    # runs Holehe in a hardened Docker container
-│   ├── ignorant_plugin.py  # runs Ignorant in a hardened Docker container
-│   ├── crtsh_plugin.py     # queries crt.sh (Certificate Transparency) in a container
-│   ├── theharvester_plugin.py  # runs theHarvester in a hardened Docker container
-│   ├── ip_plugin.py        # RDAP + ip-api.com geolocation, in a container
-│   └── recherche_entreprises_plugin.py  # France's open company registry, in a container
-├── versioning.py         # on-demand PyPI/Docker Hub/GitHub release checks
-├── cli.py                # `investigate` and `options` commands
-└── api.py                # FastAPI app: /api/plugins, /api/investigate,
-                           # /api/tools/{family}/version-check, /api/tools/{family}/report
+│   ├── base.py              # Plugin protocol (structural, no base class)
+│   ├── registry.py          # PLUGINS + TOOL_FAMILIES, shared by the CLI and the API
+│   ├── _common.py           # shared helpers: entity patterns, fetch_json, error_finding
+│   ├── _docker_runner.py    # the hardened `docker run` helper every plugin goes through
+│   ├── options.py           # validates tool options against the registry's declarations
+│   ├── mock_plugin.py       # hardcoded findings, no I/O — proves the pipeline
+│   └── <tool>_plugin.py     # one per tool: sherlock, maigret, holehe, ignorant, crtsh,
+│                            #   theharvester, ip, recherche_entreprises, exif, toutatis,
+│                            #   name, wayback, vatcomply
+├── settings.py              # ARGUSTRACE_* environment overrides
+├── logging_setup.py         # one basicConfig, shared by the CLI and the API
+├── versioning.py            # on-demand PyPI/Docker Hub/GitHub release checks
+├── cli.py                   # `investigate`, `options`, `serve`
+└── api.py                   # FastAPI app: /api/plugins, /api/investigate,
+                             #   /api/tools/{family}/version-check, .../report
 
-docker/
-├── holehe/
-│   └── Dockerfile        # builds argustrace-holehe (no official image exists)
-├── ignorant/
-│   ├── Dockerfile        # builds argustrace-ignorant (no official image exists)
-│   └── ignorant_json.py  # thin wrapper: calls ignorant's library directly, prints JSON
-├── curl/
-│   └── Dockerfile        # minimal alpine+curl image, generic — shared by every plugin
-│                          # that just needs to fetch a JSON API (crt.sh, IP, French companies)
-└── theharvester/
-    └── Dockerfile        # clones the official repo at a pinned tag, CLI entrypoint
+docker/                      # one directory per locally-built image
+├── curl/                    # minimal alpine+curl, shared by every "fetch a JSON URL"
+│                            #   plugin (crt.sh, IP, French companies, name, wayback, VAT)
+├── holehe/, ignorant/, toutatis/   # Dockerfile + a *_json.py wrapper that drives the
+│                            #   library directly and prints JSON, bypassing the CLI
+├── exiftool/                # Dockerfile + entrypoint.sh (URL fetch or local file)
+└── theharvester/            # clones the official repo at a pinned tag
 
-web/                      # React + Vite frontend, calls the FastAPI backend
+docs/plugins/                # per-tool implementation notes, one file per tool
+tests/                       # pytest suite; never touches Docker or the network
+web/                         # React + Vite frontend, calls the FastAPI backend
 ```
 
 ## Setup
@@ -111,10 +108,10 @@ Docker Desktop (or another Docker engine) must be running for every
 plugin except `mock`.
 
 Sherlock and Maigret are pulled straight from pinned registry images.
-Holehe, Ignorant, theHarvester, and the generic curl image (used by
-crt.sh, IP Lookup, and Recherche d'entreprises — none of them need
-anything beyond "fetch a JSON URL") have no official image, so each
-must be built locally once:
+Holehe, Ignorant, theHarvester, exiftool, Toutatis and the generic curl image
+(shared by every plugin that needs nothing beyond "fetch a JSON URL" — crt.sh,
+IP Lookup, Recherche d'entreprises, Name analysis, Wayback and VATComply) have
+no official image, so each must be built locally once:
 
 ```bash
 docker build -t argustrace-holehe:1.61 -f docker/holehe/Dockerfile .
@@ -299,7 +296,8 @@ is cached or persisted.
 Per-tool detail (hardening specifics, status-mapping tables, quirks
 discovered by testing against the real tool/API, why certain flags are or
 aren't exposed) lives in its own file rather than here, so this file stays
-scannable:
+scannable. The project-wide rules those notes assume are in
+[CLAUDE.md](CLAUDE.md).
 
 | Plugin                  | Notes                                                    |
 | ----------------------- | --------------------------------------------------------- |
@@ -311,6 +309,11 @@ scannable:
 | theHarvester            | [docs/plugins/theharvester.md](docs/plugins/theharvester.md) |
 | IP Lookup               | [docs/plugins/ip.md](docs/plugins/ip.md)                   |
 | Recherche d'entreprises | [docs/plugins/recherche-entreprises.md](docs/plugins/recherche-entreprises.md) |
+| Image metadata (EXIF)   | [docs/plugins/exif.md](docs/plugins/exif.md)               |
+| Toutatis                | [docs/plugins/toutatis.md](docs/plugins/toutatis.md)       |
+| Name analysis           | [docs/plugins/name.md](docs/plugins/name.md)               |
+| Wayback Machine         | [docs/plugins/wayback.md](docs/plugins/wayback.md)         |
+| VATComply               | [docs/plugins/vatcomply.md](docs/plugins/vatcomply.md)     |
 
 ## Testing
 

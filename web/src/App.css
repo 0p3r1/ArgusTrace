@@ -1569,3 +1569,49 @@
   opacity: 0.6;
   cursor: default;
 }
+
+/* Escape hatch for a scan that is taking minutes — see RunDrawer. */
+.cancel-button {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.cancel-button:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+/* Shown by ErrorBoundary in place of a white screen. */
+.crash-screen {
+  max-width: 640px;
+  margin: 4rem auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.crash-detail {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  overflow-x: auto;
+  text-align: left;
+  border-radius: 8px;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* Shown instead of the tool grid when the catalog itself failed to load. */
+.catalog-error {
+  padding: 3rem 1rem;
+  text-align: center;
+}
+
+.catalog-error .action-button {
+  margin-top: 1rem;
+}

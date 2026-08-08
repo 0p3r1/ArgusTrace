@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import AdvancedOptionsPanel from './AdvancedOptionsPanel.jsx'
 import { CloseIcon } from './icons.jsx'
 import ImageEntityInput from './ImageEntityInput.jsx'
@@ -6,6 +6,7 @@ import { fastVariant, slowVariant } from './variants.js'
 import VersionBadge from './VersionBadge.jsx'
 
 export default function RunDrawer({
+  onCancel,
   family,
   onClose,
   fastMode,
@@ -20,6 +21,18 @@ export default function RunDrawer({
   onCheckVersion,
   checkingVersion,
 }) {
+  // Ticks only while a run is in flight, so a long scan visibly progresses.
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    if (!loading) {
+      setElapsed(0)
+      return
+    }
+    const started = Date.now()
+    const id = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [loading])
+
   const hasOptionValues = Object.values(optionValues || {}).some((v) => v !== undefined)
   const [clearedFlash, setClearedFlash] = useState(false)
 
@@ -114,8 +127,15 @@ export default function RunDrawer({
           )}
 
           <button type="submit" className="submit-button" disabled={loading}>
-            {loading ? 'Investigating…' : 'Investigate'}
+            {loading ? `Investigating… ${elapsed}s` : 'Investigate'}
           </button>
+          {loading && (
+            // A full scan can run for minutes; without this, "still working"
+            // and "hung" look identical and there is no way out but a reload.
+            <button type="button" className="cancel-button" onClick={onCancel}>
+              Cancel
+            </button>
+          )}
         </form>
       </aside>
     </>

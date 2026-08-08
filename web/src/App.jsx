@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Route, Routes, useSearchParams } from 'react-router-dom'
 import './App.css'
 import { API_BASE, apiFetch } from './api.js'
@@ -12,14 +12,12 @@ import { useToolFamilies } from './useToolFamilies.js'
 import { useVersionCheck } from './useVersionCheck.js'
 import { fastVariant, slowVariant } from './variants.js'
 
-let nextResultId = 1
-
 // Run/results state lives here, above <Routes>, so the drawer and the
 // results tray survive navigating to a tool's info page — they used to
 // live inside InvestigatePage and got wiped every time React Router
 // unmounted it for a route change.
 function App() {
-  const { families, error: familiesError, setFamilies } = useToolFamilies()
+  const { families, error: familiesError, setFamilies, reload } = useToolFamilies()
   const { checkVersion, checkingFamily } = useVersionCheck(setFamilies)
 
   const [openFamily, setOpenFamily] = useState(null)
@@ -30,6 +28,9 @@ function App() {
   const [runResults, setRunResults] = useState([])
   const [activeResultId, setActiveResultId] = useState(null)
   const [searchParams, setSearchParams] = useSearchParams()
+  // Lets the drawer abort an in-flight scan; a full run can take minutes and
+  // was previously only escapable by reloading the page.
+  const inFlight = useRef(null)
 
   const openFamilyData = families.find((f) => f.family === openFamily) ?? null
   const activeResult = runResults.find((r) => r.id === activeResultId) ?? null
@@ -89,11 +90,16 @@ function App() {
     const rawOptions = fastMode ? {} : optionsByFamily[openFamily] || {}
     const options = Object.fromEntries(Object.entries(rawOptions).filter(([, v]) => v !== undefined))
 
-    const id = nextResultId++
+    // A module-level counter survived Vite's HMR reset while runResults did
+    // not, so ids restarted at 1 and collided with results already on screen.
+    const id = crypto.randomUUID()
 
     try {
+      const controller = new AbortController()
+      inFlight.current = controller
       const res = await apiFetch(`${API_BASE}/api/investigate`, {
         method: 'POST',
+        signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           entity: investigatedEntity,
@@ -105,8 +111,10 @@ function App() {
       const findings = await res.json()
       setRunResults((prev) => [...prev, { id, family, plugin, entity: investigatedEntity, findings, error: null, statusFilter: null }])
     } catch (err) {
-      setRunResults((prev) => [...prev, { id, family, plugin, entity: investigatedEntity, findings: null, error: err.message, statusFilter: null }])
+      const message = err.name === 'AbortError' ? 'Cancelled.' : err.message
+      setRunResults((prev) => [...prev, { id, family, plugin, entity: investigatedEntity, findings: null, error: message, statusFilter: null }])
     } finally {
+      inFlight.current = null
       setLoading(false)
       setActiveResultId(id)
       closeDrawer()
@@ -126,7 +134,7 @@ function App() {
       <Routes>
         <Route
           path="/"
-          element={<InvestigatePage families={families} familiesError={familiesError} onOpenTool={openTool} />}
+          element={<InvestigatePage families={families} familiesError={familiesError} onOpenTool={openTool} onReload={reload} />}
         />
         <Route
           path="/tools/:family"
@@ -175,6 +183,7 @@ function App() {
         entity={entity}
         onEntityChange={setEntity}
         onSubmit={handleSubmit}
+        onCancel={() => inFlight.current?.abort()}
         loading={loading}
         onCheckVersion={() => checkVersion(openFamily)}
         checkingVersion={checkingFamily === openFamily}

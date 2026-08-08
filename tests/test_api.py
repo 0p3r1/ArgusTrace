@@ -120,3 +120,18 @@ def test_investigate_accepts_valid_options():
         json={"entity": "alice", "plugin": "mock", "options": None},
     )
     assert res.status_code == 200
+
+
+def test_a_malformed_family_is_skipped_not_fatal(monkeypatch, caplog):
+    """One bad entry used to 500 the catalog for all thirteen tools."""
+    broken = dict(registry.TOOL_FAMILIES)
+    broken["broken"] = {"label": "Broken"}  # missing everything else
+    monkeypatch.setattr(registry, "TOOL_FAMILIES", broken)
+    monkeypatch.setattr("argustrace.api.TOOL_FAMILIES", broken)
+
+    res = client.get("/api/plugins")
+
+    assert res.status_code == 200
+    families = {f["family"] for f in res.json()}
+    assert "broken" not in families
+    assert "maigret" in families  # the rest still serve

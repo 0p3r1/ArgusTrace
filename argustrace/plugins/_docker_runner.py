@@ -1,11 +1,17 @@
 import asyncio
 import os
 import tempfile
+import time
 import weakref
 from dataclasses import dataclass
 from pathlib import Path
 
+from argustrace.logging_setup import get_logger
 from argustrace.settings import SETTINGS
+
+# Logs the image, the timeout and the outcome — never argv, which carries the
+# entity being investigated and, historically, secrets.
+logger = get_logger(__name__)
 
 # Shared hardening applied to every plugin that shells out to Docker: no
 # capabilities, no privilege escalation, read-only rootfs, bounded resources.
@@ -109,11 +115,10 @@ async def run_hardened(
     network: str | None = None,
 ) -> DockerRunResult:
     # Scaled here rather than in each plugin: one place, and every caller
-    # (including future ones) gets it without having to remember. The scale
-    # can only lengthen, so this cannot pull a timeout below the one a
+    # (including future ones) gets it without having to remember. No floor is
+    # needed because the scale is clamped to >= 1.0 in settings, so this can
+    # only ever lengthen the deadline — never pull it below the timeout a
     # container applies to itself.
-    # No floor needed: the scale is clamped to >= 1.0 in settings, so this
-    # can only ever lengthen the deadline it was given.
     timeout_s = round(timeout_s * SETTINGS.timeout_scale)
 
     async with _concurrency_slot():
@@ -155,9 +160,11 @@ async def run_hardened(
                     error="docker executable not found on host",
                 )
 
+            started = time.monotonic()
             try:
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
             except TimeoutError:
+                logger.warning("%s timed out after %ss — killing the container", image, timeout_s)
                 await _kill_container(cidfile)
                 proc.kill()
                 await proc.wait()
@@ -166,6 +173,9 @@ async def run_hardened(
                     error=f"docker run timed out after {timeout_s}s",
                 )
 
+            logger.info(
+                "%s exited %s after %.1fs", image, proc.returncode, time.monotonic() - started,
+            )
             return DockerRunResult(
                 ok=True, returncode=proc.returncode, stdout=stdout, stderr=stderr, error=None,
             )

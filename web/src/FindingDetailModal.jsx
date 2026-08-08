@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CheckIcon, CloseIcon, CopyIcon } from './icons.jsx'
+import { describeRecord, isPresent, openStreetMapUrl, parseCoordinates } from './lib/evidence.js'
 import RemoteAvatar from './RemoteAvatar.jsx'
 import StatusBadge from './StatusBadge.jsx'
 
@@ -8,10 +9,6 @@ import StatusBadge from './StatusBadge.jsx'
 const HANDLED_KEYS = new Set(['headline', 'coordinates', 'reason'])
 // Within evidence.profile specifically, the photo gets its own visual slot.
 const PROFILE_HANDLED_KEYS = new Set(['image'])
-
-function isPresent(value) {
-  return value !== null && value !== undefined && value !== '' && !(Array.isArray(value) && value.length === 0)
-}
 
 // Flatten evidence.profile/evidence.related_ids into individual field rows
 // (fullname, location, related usernames, ...) instead of leaving them as
@@ -45,13 +42,7 @@ function formatFieldValue(value) {
       return (
         <ul className="detail-field-list">
           {value.map((item, i) => (
-            <li key={i}>
-              {item.nom || item.prenoms
-                ? [item.prenoms, item.nom].filter(Boolean).join(' ') + (item.qualite ? ` — ${item.qualite}` : '')
-                : item.denomination
-                  ? item.denomination + (item.qualite ? ` — ${item.qualite}` : '')
-                  : JSON.stringify(item)}
-            </li>
+            <li key={i}>{describeRecord(item) ?? JSON.stringify(item)}</li>
           ))}
         </ul>
       )
@@ -81,15 +72,7 @@ function fieldLabel(key) {
 function plainTextValue(value) {
   if (Array.isArray(value)) {
     if (typeof value[0] === 'object' && value[0] !== null) {
-      return value
-        .map((item) =>
-          item.nom || item.prenoms
-            ? [item.prenoms, item.nom].filter(Boolean).join(' ') + (item.qualite ? ` — ${item.qualite}` : '')
-            : item.denomination
-              ? item.denomination + (item.qualite ? ` — ${item.qualite}` : '')
-              : JSON.stringify(item)
-        )
-        .join(', ')
+      return value.map((item) => describeRecord(item) ?? JSON.stringify(item)).join(', ')
     }
     return value.join(', ')
   }
@@ -128,7 +111,7 @@ function CopyButton({ value, label }) {
 export default function FindingDetailModal({ finding, onClose }) {
   const evidence = finding.evidence || {}
   const profile = evidence.profile
-  const coords = typeof evidence.coordinates === 'string' ? evidence.coordinates.split(',') : null
+  const coords = parseCoordinates(evidence.coordinates)
   const fields = buildFieldRows(evidence)
 
   return (
@@ -162,7 +145,7 @@ export default function FindingDetailModal({ finding, onClose }) {
           {coords && (
             <a
               className="action-button"
-              href={`https://www.openstreetmap.org/?mlat=${coords[0]}&mlon=${coords[1]}#map=11/${coords[0]}/${coords[1]}`}
+              href={openStreetMapUrl(coords)}
               target="_blank"
               rel="noreferrer"
             >

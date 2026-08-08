@@ -3,7 +3,7 @@ import json
 import phonenumbers
 
 from argustrace.core.models import Finding, Status
-from argustrace.plugins._common import error_finding
+from argustrace.plugins._common import clamp_int, error_finding
 from argustrace.plugins._docker_runner import run_hardened
 
 IMAGE = "argustrace-ignorant:1.2"
@@ -46,11 +46,10 @@ class IgnorantPlugin:
         return self._parse_rows(entity, rows)
 
     def _resolve_timeout(self, options: dict) -> int:
-        try:
-            timeout = int(options.get("timeout", DEFAULT_TIMEOUT_S))
-        except (TypeError, ValueError):
-            timeout = DEFAULT_TIMEOUT_S
-        return max(TIMEOUT_MIN_S, min(TIMEOUT_MAX_S, timeout))
+        return clamp_int(
+            options.get("timeout", DEFAULT_TIMEOUT_S),
+            default=DEFAULT_TIMEOUT_S, low=TIMEOUT_MIN_S, high=TIMEOUT_MAX_S,
+        )
 
     def _parse_rows(self, entity: str, rows: list[dict]) -> list[Finding]:
         findings = []

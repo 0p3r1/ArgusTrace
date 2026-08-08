@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 from argustrace.core.models import Finding, Status
-from argustrace.plugins._common import error_finding
+from argustrace.plugins._common import clamp_int, error_finding
 from argustrace.plugins._docker_runner import run_hardened
 
 IMAGE = "soxoj/maigret@sha256:aff1954c2c71323368ebb9806efb7e121101d7638736094d4cd3f2b61e7a4fc2"
@@ -77,17 +77,14 @@ class MaigretPlugin:
     def _build_args(self, entity: str, options: dict | None) -> list[str]:
         options = options or {}
 
-        try:
-            timeout = int(options.get("timeout", DEFAULT_SITE_TIMEOUT_S))
-        except (TypeError, ValueError):
-            timeout = DEFAULT_SITE_TIMEOUT_S
-        timeout = max(SITE_TIMEOUT_MIN_S, min(SITE_TIMEOUT_MAX_S, timeout))
-
-        try:
-            retries = int(options.get("retries", DEFAULT_RETRIES))
-        except (TypeError, ValueError):
-            retries = DEFAULT_RETRIES
-        retries = max(RETRIES_MIN, min(RETRIES_MAX, retries))
+        timeout = clamp_int(
+            options.get("timeout", DEFAULT_SITE_TIMEOUT_S),
+            default=DEFAULT_SITE_TIMEOUT_S, low=SITE_TIMEOUT_MIN_S, high=SITE_TIMEOUT_MAX_S,
+        )
+        retries = clamp_int(
+            options.get("retries", DEFAULT_RETRIES),
+            default=DEFAULT_RETRIES, low=RETRIES_MIN, high=RETRIES_MAX,
+        )
 
         tags = options.get("tags")
         tags = tags.strip() if isinstance(tags, str) and tags.strip() else None

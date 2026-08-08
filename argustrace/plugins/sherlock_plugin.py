@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 from argustrace.core.models import Finding, Status
-from argustrace.plugins._common import USERNAME_PATTERN_SOURCE, error_finding
+from argustrace.plugins._common import USERNAME_PATTERN_SOURCE, clamp_int, error_finding
 from argustrace.plugins._docker_runner import run_hardened
 
 IMAGE = "sherlock/sherlock@sha256:9d6602b98179fb15ceab88433626fb0ae603ae9880e13cab886970317fe1475f"
@@ -67,11 +67,10 @@ class SherlockPlugin:
 
     def _build_args(self, entity: str, options: dict | None) -> list[str]:
         options = options or {}
-        try:
-            timeout = int(options.get("timeout", DEFAULT_SITE_TIMEOUT_S))
-        except (TypeError, ValueError):
-            timeout = DEFAULT_SITE_TIMEOUT_S
-        timeout = max(SITE_TIMEOUT_MIN_S, min(SITE_TIMEOUT_MAX_S, timeout))
+        timeout = clamp_int(
+            options.get("timeout", DEFAULT_SITE_TIMEOUT_S),
+            default=DEFAULT_SITE_TIMEOUT_S, low=SITE_TIMEOUT_MIN_S, high=SITE_TIMEOUT_MAX_S,
+        )
 
         args = [
             entity,

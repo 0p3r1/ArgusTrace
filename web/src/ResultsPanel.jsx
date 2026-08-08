@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { API_BASE, apiFetch } from './api.js'
 import { downloadFindings, findingsContent } from './exportFindings.js'
+import { isEmptyValue, openStreetMapUrl, parseCoordinates } from './lib/evidence.js'
 import FindingDetailModal from './FindingDetailModal.jsx'
 import { CloseIcon, EyeIcon, MinimizeIcon } from './icons.jsx'
 import PreviewModal from './PreviewModal.jsx'
@@ -29,10 +30,6 @@ function hasMeaningfulEvidence(evidence) {
   return Object.entries(evidence).some(([key, value]) => !DIAGNOSTIC_KEYS.has(key) && !isEmptyValue(value))
 }
 
-function isEmptyValue(value) {
-  return value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
-}
-
 function ProfileSummary({ profile, relatedIds }) {
   const label = profile?.fullname || profile?.name
   const meta = profile ? PROFILE_META_FIELDS.filter((key) => profile[key]).map((key) => profile[key]) : []
@@ -53,7 +50,7 @@ function ProfileSummary({ profile, relatedIds }) {
 function DetailsCell({ finding, onOpenDetail }) {
   const evidence = finding.evidence
   const clickable = hasMeaningfulEvidence(evidence)
-  const coords = typeof evidence?.coordinates === 'string' ? evidence.coordinates.split(',') : null
+  const coords = parseCoordinates(evidence?.coordinates)
 
   let body
   if (evidence?.profile || evidence?.related_ids) {
@@ -72,7 +69,7 @@ function DetailsCell({ finding, onOpenDetail }) {
       {body}
       {coords && (
         <a
-          href={`https://www.openstreetmap.org/?mlat=${coords[0]}&mlon=${coords[1]}#map=11/${coords[0]}/${coords[1]}`}
+          href={openStreetMapUrl(coords)}
           target="_blank"
           rel="noreferrer"
           className="details-map-link"

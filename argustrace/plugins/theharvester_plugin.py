@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 from argustrace.core.models import Finding, Status
-from argustrace.plugins._common import DOMAIN_PATTERN_SOURCE, error_finding
+from argustrace.plugins._common import DOMAIN_PATTERN_SOURCE, clamp_int, error_finding
 from argustrace.plugins._docker_runner import run_hardened
 
 IMAGE = "argustrace-theharvester:4.11.1"
@@ -75,11 +75,9 @@ class TheHarvesterPlugin:
         return self.sources
 
     def _build_args(self, entity: str, options: dict, sources: str) -> list[str]:
-        try:
-            limit = int(options.get("limit", DEFAULT_LIMIT))
-        except (TypeError, ValueError):
-            limit = DEFAULT_LIMIT
-        limit = max(LIMIT_MIN, min(LIMIT_MAX, limit))
+        limit = clamp_int(
+            options.get("limit", DEFAULT_LIMIT), default=DEFAULT_LIMIT, low=LIMIT_MIN, high=LIMIT_MAX,
+        )
 
         args = ["-d", entity, "-b", sources, "-l", str(limit), "-f", "/output/report"]
         if options.get("dns_lookup"):

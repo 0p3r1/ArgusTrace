@@ -116,5 +116,3 @@ Use a scratch directory for throwaway verification scripts, not the repo.
 - Conventional Commits, no `Co-Authored-By` trailer.
 - Dependencies via `uv` (`pyproject.toml` + `uv.lock`, hashes verified).
 - `make check` mirrors CI: ruff, pytest, and the frontend lint/build.
-- Never commit or push without an explicit go-ahead in that turn — a prior
-  approval does not carry forward to the next round of changes.

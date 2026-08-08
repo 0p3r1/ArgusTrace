@@ -1,6 +1,5 @@
 from argustrace.core.models import Status
-from argustrace.plugins import name_plugin
-from argustrace.plugins._docker_runner import DockerRunResult
+from argustrace.plugins import _common, name_plugin
 from argustrace.plugins.name_plugin import NamePlugin
 
 
@@ -82,19 +81,15 @@ async def test_run_all_three_sources_fail(monkeypatch):
     assert "connection refused" in findings[0].evidence["reason"]
 
 
-async def test_fetch_treats_valid_json_error_body_as_a_failure_not_data(monkeypatch):
+async def test_fetch_treats_valid_json_error_body_as_a_failure_not_data(fake_docker, docker_result):
     # Verified against the real API: hitting the daily rate limit doesn't
     # fail curl or break JSON parsing — it's a 200-shaped, valid JSON body
     # {"error": "Request limit reached"}. Without an explicit check this
     # silently reads as "responded with no data", producing a false
     # NOT_FOUND instead of an ERROR for a condition we never actually verified.
-    async def fake_run_hardened(image, args, timeout_s, volume=None, env=None, network=None):
-        return DockerRunResult(ok=True, returncode=0, stdout=b'{"error": "Request limit reached"}', stderr=b"", error=None)
+    fake_docker(_common, docker_result(b'{"error": "Request limit reached"}'))
 
-    monkeypatch.setattr(name_plugin, "run_hardened", fake_run_hardened)
-
-    plugin = NamePlugin()
-    findings = await plugin.run("jean")
+    findings = await NamePlugin().run("jean")
 
     assert findings[0].status == Status.ERROR
     assert "Request limit reached" in findings[0].evidence["reason"]

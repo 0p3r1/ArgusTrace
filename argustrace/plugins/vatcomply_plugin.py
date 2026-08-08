@@ -1,15 +1,12 @@
 import asyncio
-import json
 import re
 from urllib.parse import quote
 
 from argustrace.core.models import Finding, Status
-from argustrace.plugins._docker_runner import run_hardened
-from argustrace.settings import SETTINGS
+from argustrace.plugins._common import error_finding, fetch_json
 
-IMAGE = SETTINGS.curl_image  # shared "fetch a JSON URL" image
-# Above the shared curl image's own --max-time (25s) plus startup — see
-# name_plugin.py for the rationale; asserted in test_registry_consistency.py.
+# Must stay above the shared curl image's own --max-time plus container
+# startup; asserted in tests/test_registry_consistency.py.
 RUN_TIMEOUT_S = 35
 
 # EU VAT numbers: 2-letter country code + up to 12 alphanumeric chars —
@@ -49,31 +46,26 @@ class VatComplyPlugin:
 
         last_error = "unknown error"
         for attempt in range(1, MAX_ATTEMPTS + 1):
-            result = await run_hardened(IMAGE, [url], timeout_s=RUN_TIMEOUT_S)
+            fetched = await fetch_json(
+                url, timeout_s=RUN_TIMEOUT_S, describe="VATComply", expect=dict,
+            )
 
-            if not result.ok:
-                last_error = result.error
-            elif result.returncode != 0:
-                last_error = f"curl failed: {result.stderr.decode(errors='replace')[:300]}"
+            if fetched.error:
+                last_error = fetched.error
             else:
-                try:
-                    data = json.loads(result.stdout.decode())
-                except json.JSONDecodeError:
-                    last_error = "VATComply returned a non-JSON response"
+                detail = fetched.data.get("detail")
+                if detail == "INVALID_INPUT":
+                    return [self._error(entity, "invalid entity: not a valid EU VAT number format")]
+                if detail and not TRANSIENT_DETAIL_PATTERN.match(detail):
+                    # A full-sentence detail is a permanent, non-retryable
+                    # problem, not a transient VIES gateway hiccup.
+                    return [self._error(entity, detail)]
+                if detail:
+                    # EU VIES member-state gateway error (overloaded,
+                    # unavailable, ...) — transient, worth retrying.
+                    last_error = f"EU VIES system error: {detail}"
                 else:
-                    detail = data.get("detail")
-                    if detail == "INVALID_INPUT":
-                        return [self._error(entity, "invalid entity: not a valid EU VAT number format")]
-                    if detail and not TRANSIENT_DETAIL_PATTERN.match(detail):
-                        # A full-sentence detail is a permanent, non-retryable
-                        # problem, not a transient VIES gateway hiccup.
-                        return [self._error(entity, detail)]
-                    if detail:
-                        # EU VIES member-state gateway error (overloaded,
-                        # unavailable, ...) — transient, worth retrying.
-                        last_error = f"EU VIES system error: {detail}"
-                    else:
-                        return self._parse_response(entity, data)
+                    return self._parse_response(entity, fetched.data)
 
             if attempt < MAX_ATTEMPTS:
                 await asyncio.sleep(RETRY_DELAY_S)
@@ -103,6 +95,4 @@ class VatComplyPlugin:
         )]
 
     def _error(self, entity: str, reason: str) -> Finding:
-        return Finding(
-            entity=entity, entity_type="company", source="vatcomply", status=Status.ERROR, evidence={"reason": reason},
-        )
+        return error_finding(entity, entity_type="company", source="vatcomply", reason=reason)

@@ -4,10 +4,11 @@ import tempfile
 from pathlib import Path
 
 from argustrace.core.models import Finding, Status
+from argustrace.plugins._common import USERNAME_PATTERN_SOURCE, error_finding
 from argustrace.plugins._docker_runner import run_hardened
 
 IMAGE = "sherlock/sherlock@sha256:9d6602b98179fb15ceab88433626fb0ae603ae9880e13cab886970317fe1475f"
-ENTITY_PATTERN = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")
+ENTITY_PATTERN = re.compile(USERNAME_PATTERN_SOURCE)
 
 # Small, fast-responding set of well-known sites. Checking all ~400+ sites
 # that Sherlock knows about takes 1-3 minutes; this default trades recall
@@ -116,10 +117,4 @@ class SherlockPlugin:
             return raw
 
     def _error(self, entity: str, reason: str) -> Finding:
-        return Finding(
-            entity=entity,
-            entity_type="username",
-            source="sherlock",
-            status=Status.ERROR,
-            evidence={"reason": reason},
-        )
+        return error_finding(entity, entity_type="username", source="sherlock", reason=reason)

@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 from argustrace.core.models import Finding, Status
+from argustrace.plugins._common import error_finding
 from argustrace.plugins._docker_runner import run_hardened
 
 IMAGE = "soxoj/maigret@sha256:aff1954c2c71323368ebb9806efb7e121101d7638736094d4cd3f2b61e7a4fc2"
@@ -186,13 +187,7 @@ class MaigretPlugin:
         return findings
 
     def _error(self, entity: str, reason: str) -> Finding:
-        return Finding(
-            entity=entity,
-            entity_type="username",
-            source="maigret",
-            status=Status.ERROR,
-            evidence={"reason": reason},
-        )
+        return error_finding(entity, entity_type="username", source="maigret", reason=reason)
 
 
 # Native report generation: a separate, optional capability from the Plugin

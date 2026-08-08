@@ -3,6 +3,7 @@ import json
 import phonenumbers
 
 from argustrace.core.models import Finding, Status
+from argustrace.plugins._common import error_finding
 from argustrace.plugins._docker_runner import run_hardened
 
 IMAGE = "argustrace-ignorant:1.2"
@@ -82,10 +83,4 @@ class IgnorantPlugin:
         return findings
 
     def _error(self, entity: str, reason: str) -> Finding:
-        return Finding(
-            entity=entity,
-            entity_type="phone",
-            source="ignorant",
-            status=Status.ERROR,
-            evidence={"reason": reason},
-        )
+        return error_finding(entity, entity_type="phone", source="ignorant", reason=reason)

@@ -2,6 +2,7 @@ import json
 import re
 
 from argustrace.core.models import Finding, Status
+from argustrace.plugins._common import error_finding
 from argustrace.plugins._docker_runner import run_hardened
 
 IMAGE = "argustrace-holehe:1.61"
@@ -94,10 +95,4 @@ class HolehePlugin:
         return findings
 
     def _error(self, entity: str, reason: str) -> Finding:
-        return Finding(
-            entity=entity,
-            entity_type="email",
-            source="holehe",
-            status=Status.ERROR,
-            evidence={"reason": reason},
-        )
+        return error_finding(entity, entity_type="email", source="holehe", reason=reason)

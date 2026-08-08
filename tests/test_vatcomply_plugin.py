@@ -1,5 +1,5 @@
 from argustrace.core.models import Status
-from argustrace.plugins import vatcomply_plugin
+from argustrace.plugins import _common, vatcomply_plugin
 from argustrace.plugins._docker_runner import DockerRunResult
 from argustrace.plugins.vatcomply_plugin import VatComplyPlugin
 
@@ -21,7 +21,7 @@ async def test_run_invalid_input_detail_is_error_no_retry(monkeypatch):
         calls += 1
         return DockerRunResult(ok=True, returncode=0, stdout=b'{"detail": "INVALID_INPUT"}', stderr=b"", error=None)
 
-    monkeypatch.setattr(vatcomply_plugin, "run_hardened", fake_run_hardened)
+    monkeypatch.setattr(_common, "run_hardened", fake_run_hardened)
 
     plugin = VatComplyPlugin()
     findings = await plugin.run("FR40303265045")
@@ -44,7 +44,7 @@ async def test_run_retries_on_transient_vies_error_then_succeeds(monkeypatch):
     async def instant_sleep(_seconds):
         pass
 
-    monkeypatch.setattr(vatcomply_plugin, "run_hardened", fake_run_hardened)
+    monkeypatch.setattr(_common, "run_hardened", fake_run_hardened)
     monkeypatch.setattr(vatcomply_plugin.asyncio, "sleep", instant_sleep)
 
     plugin = VatComplyPlugin()
@@ -61,7 +61,7 @@ async def test_run_gives_up_after_max_attempts_of_transient_errors(monkeypatch):
     async def instant_sleep(_seconds):
         pass
 
-    monkeypatch.setattr(vatcomply_plugin, "run_hardened", fake_run_hardened)
+    monkeypatch.setattr(_common, "run_hardened", fake_run_hardened)
     monkeypatch.setattr(vatcomply_plugin.asyncio, "sleep", instant_sleep)
 
     plugin = VatComplyPlugin()
@@ -103,7 +103,7 @@ async def test_run_normalizes_spaces_and_case(monkeypatch):
         captured["url"] = args[0]
         return DockerRunResult(ok=True, returncode=0, stdout=b'{"valid": false}', stderr=b"", error=None)
 
-    monkeypatch.setattr(vatcomply_plugin, "run_hardened", fake_run_hardened)
+    monkeypatch.setattr(_common, "run_hardened", fake_run_hardened)
 
     plugin = VatComplyPlugin()
     await plugin.run("fr 40303265045")
@@ -125,7 +125,7 @@ async def test_run_full_sentence_detail_is_error_no_retry(monkeypatch):
         detail = "Invalid VAT number format. Expected format: Two-letter country code followed by 8-12 digits or letters."
         return DockerRunResult(ok=True, returncode=0, stdout=f'{{"detail": "{detail}"}}'.encode(), stderr=b"", error=None)
 
-    monkeypatch.setattr(vatcomply_plugin, "run_hardened", fake_run_hardened)
+    monkeypatch.setattr(_common, "run_hardened", fake_run_hardened)
 
     plugin = VatComplyPlugin()
     findings = await plugin.run("FRAB1234567")
@@ -150,7 +150,7 @@ async def test_run_short_uppercase_detail_is_still_treated_as_transient(monkeypa
     async def instant_sleep(_seconds):
         pass
 
-    monkeypatch.setattr(vatcomply_plugin, "run_hardened", fake_run_hardened)
+    monkeypatch.setattr(_common, "run_hardened", fake_run_hardened)
     monkeypatch.setattr(vatcomply_plugin.asyncio, "sleep", instant_sleep)
 
     plugin = VatComplyPlugin()
@@ -167,7 +167,7 @@ async def test_run_reports_docker_failure(monkeypatch):
     async def instant_sleep(_seconds):
         pass
 
-    monkeypatch.setattr(vatcomply_plugin, "run_hardened", fake_run_hardened)
+    monkeypatch.setattr(_common, "run_hardened", fake_run_hardened)
     monkeypatch.setattr(vatcomply_plugin.asyncio, "sleep", instant_sleep)
 
     plugin = VatComplyPlugin()

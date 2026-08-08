@@ -4,10 +4,11 @@ import tempfile
 from pathlib import Path
 
 from argustrace.core.models import Finding, Status
+from argustrace.plugins._common import DOMAIN_PATTERN_SOURCE, error_finding
 from argustrace.plugins._docker_runner import run_hardened
 
 IMAGE = "argustrace-theharvester:4.11.1"
-ENTITY_PATTERN = re.compile(r"^(?=.{1,253}$)([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$")
+ENTITY_PATTERN = re.compile(DOMAIN_PATTERN_SOURCE)
 
 # All free, no-API-key-required sources. "broad" combines several passive
 # sources for more coverage at the cost of a longer run.
@@ -130,13 +131,7 @@ class TheHarvesterPlugin:
         return findings
 
     def _error(self, entity: str, reason: str) -> Finding:
-        return Finding(
-            entity=entity,
-            entity_type="domain",
-            source="theharvester",
-            status=Status.ERROR,
-            evidence={"reason": reason},
-        )
+        return error_finding(entity, entity_type="domain", source="theharvester", reason=reason)
 
 
 # Native report generation: a separate, optional capability from the Plugin

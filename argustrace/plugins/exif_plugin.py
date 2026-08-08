@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from argustrace.core.models import Finding, Status
+from argustrace.plugins._common import error_finding
 from argustrace.plugins._docker_runner import run_hardened
 
 IMAGE = "argustrace-exiftool:1.0"
@@ -233,6 +234,4 @@ class ExifPlugin:
         return evidence
 
     def _error(self, entity: str, reason: str) -> Finding:
-        return Finding(
-            entity=entity, entity_type="image", source="exiftool", status=Status.ERROR, evidence={"reason": reason},
-        )
+        return error_finding(entity, entity_type="image", source="exiftool", reason=reason)

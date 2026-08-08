@@ -1,14 +1,11 @@
 import asyncio
-import json
 import re
 from urllib.parse import quote
 
 from argustrace.core.models import Finding, Status
-from argustrace.plugins._docker_runner import run_hardened
-from argustrace.settings import SETTINGS
+from argustrace.plugins._common import error_finding, fetch_json
 
-IMAGE = SETTINGS.curl_image  # shared "fetch a JSON URL" image
-# Must stay above the shared curl image's own --max-time (25s) plus container
+# Must stay above the shared curl image's own --max-time plus container
 # startup, so curl aborts with a clean error instead of the outer docker
 # timeout killing the container mid-request. Asserted in
 # tests/test_registry_consistency.py.
@@ -53,15 +50,12 @@ class NamePlugin:
         return [self._build_finding(entity, gender_data, age_data, nationality_data, errors)]
 
     async def _fetch(self, url: str, label: str) -> dict | str:
-        result = await run_hardened(IMAGE, [url], timeout_s=RUN_TIMEOUT_S)
-        if not result.ok:
-            return f"{label}: {result.error}"
-        if result.returncode != 0:
-            return f"{label}: curl failed: {result.stderr.decode(errors='replace')[:200]}"
-        try:
-            parsed = json.loads(result.stdout.decode())
-        except json.JSONDecodeError:
-            return f"{label}: non-JSON response (likely rate-limited)"
+        fetched = await fetch_json(
+            url, timeout_s=RUN_TIMEOUT_S, describe=f"{label} (likely rate-limited)", expect=dict,
+        )
+        if fetched.error:
+            return f"{label}: {fetched.error}"
+        parsed = fetched.data
         if isinstance(parsed, dict) and parsed.get("error"):
             # These APIs return HTTP 429 with a *valid* JSON error body (e.g.
             # {"error": "Request limit reached"}) on daily rate limit —
@@ -115,6 +109,4 @@ class NamePlugin:
         return Finding(entity=entity, entity_type="name", source="name-analysis", status=status, evidence=evidence)
 
     def _error(self, entity: str, reason: str) -> Finding:
-        return Finding(
-            entity=entity, entity_type="name", source="name-analysis", status=Status.ERROR, evidence={"reason": reason},
-        )
+        return error_finding(entity, entity_type="name", source="name-analysis", reason=reason)

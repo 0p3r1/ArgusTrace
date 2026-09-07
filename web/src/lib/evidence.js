@@ -1,4 +1,4 @@
-// Shared reading of the `evidence` conventions (see CLAUDE.md).
+// Shared reading of the `evidence` conventions (see ARCHITECTURE.md).
 //
 // These were duplicated between ResultsPanel and FindingDetailModal — the
 // same emptiness test under two names, the same OpenStreetMap URL built

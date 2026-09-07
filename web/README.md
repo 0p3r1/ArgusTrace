@@ -18,6 +18,6 @@ Both endpoints are overridable at build time:
   configured to require one. Not needed for the default loopback setup.
 
 See the repository [README](../README.md) for running the backend, and
-[CLAUDE.md](../CLAUDE.md) for the conventions this UI relies on — in
+[ARCHITECTURE.md](../ARCHITECTURE.md) for the conventions this UI relies on — in
 particular the `evidence` keys (`headline`, `profile`, `coordinates`) that
 get their own rendering.

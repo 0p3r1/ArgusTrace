@@ -39,7 +39,7 @@ source = ["argustrace"]
 [tool.coverage.report]
 # The lines the suite deliberately cannot reach: `run_hardened` is stubbed by
 # the `fake_docker` fixture, so the real `docker run` call and its failure
-# branches are covered by hand, not here. See CLAUDE.md's testing section.
+# branches are covered by hand, not here. See ARCHITECTURE.md's testing section.
 exclude_also = [
     "if TYPE_CHECKING:",
     "raise NotImplementedError",

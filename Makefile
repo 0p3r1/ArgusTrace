@@ -18,7 +18,7 @@ test:
 
 # Deliberately not part of `check`, and no threshold is enforced: the number
 # measures the stubbed suite only. What it cannot see — a plugin against the
-# real tool — is the part CLAUDE.md insists on doing by hand, and a green
+# real tool — is the part ARCHITECTURE.md insists on by hand, and a green
 # percentage here must never be mistaken for that.
 cov:
 	uv run pytest -q --cov --cov-report=term-missing

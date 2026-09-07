@@ -5,26 +5,56 @@ on:
     branches: [main]
   pull_request:
 
-# Neither job needs Docker. Every plugin test stubs `run_hardened`, so the
-# OSINT tool images are never pulled or run here — actually exercising them
-# against real targets stays a manual step, as does building the local images.
+# No job needs Docker. Every plugin test stubs `run_hardened`, so the OSINT
+# tool images are never pulled or run here — actually exercising them against
+# real targets stays a manual step, as does building the local images.
+#
+# Actions are pinned by commit SHA, not by tag: a tag is mutable and can be
+# repointed at other code by whoever owns the repo, which is the same
+# supply-chain hole that pinning Docker images by digest closes. The trailing
+# comment is the human-readable version — bump both together.
 jobs:
-  python:
-    name: Python (lint + tests)
+  lint:
+    name: Lint (ruff)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
 
       - name: Install dependencies
         run: uv sync --dev
 
+      # Ruff's own target-version is pinned to py311, so linting once is
+      # enough — it does not vary with the interpreter the tests run under.
       - name: Lint
         run: uv run ruff check .
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      # Report every failing version, not just the first one.
+      fail-fast: false
+      matrix:
+        # Must stay in sync with `requires-python` in pyproject.toml: the
+        # README's "Python 3.11+" badge is only a fact while this matrix
+        # covers the oldest supported version.
+        python-version: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --dev
 
       - name: Tests
         run: uv run pytest -q
@@ -36,9 +66,9 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
           cache: npm

@@ -2,6 +2,7 @@
 __pycache__/
 .env
 CLAUDE.local.md
+.claude/settings.local.json
 .pytest_cache/
 .ruff_cache/
 .coverage

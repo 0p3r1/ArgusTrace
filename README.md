@@ -372,7 +372,7 @@ in its own file:
 | VATComply               | [docs/plugins/vatcomply.md](docs/plugins/vatcomply.md)     |
 
 Adding one is documented in [CONTRIBUTING.md](CONTRIBUTING.md); the invariants
-it assumes are in [CLAUDE.md](CLAUDE.md).
+it assumes are in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Scope
 

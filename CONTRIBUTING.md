@@ -1,6 +1,6 @@
 # Contributing to ArgusTrace
 
-Read [CLAUDE.md](CLAUDE.md) first. It holds the invariants the codebase is
+Read [ARCHITECTURE.md](ARCHITECTURE.md) first. It holds the invariants the codebase is
 built around — the tri-state `Status`, the Protocol-not-base-class rule, the
 container boundary, the `evidence` conventions — and most of them exist
 because getting them wrong caused a real bug.
@@ -27,7 +27,7 @@ pulled or executed by a test.
 
 That is also the limit of what they prove. **Running a plugin against a real
 target is a manual step and it is not optional** — see the testing section of
-CLAUDE.md for why.
+ARCHITECTURE.md for why.
 
 ## Adding a plugin
 
